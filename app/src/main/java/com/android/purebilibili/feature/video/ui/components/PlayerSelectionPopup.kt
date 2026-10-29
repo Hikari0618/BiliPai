@@ -162,6 +162,7 @@ fun PlayerSelectionPopup(
         // height 只是约束上限（接近屏幕尺寸），拿它算偏移会算偏，
         // 必须用测量到的真实高度才能贴着锚点展开。
         val menuHeightPx = with(menuDensity) { height.roundToPx() }
+        val menuWidthPx = with(menuDensity) { width.roundToPx() }
         var menuMeasuredSize by remember { mutableStateOf(IntSize.Zero) }
         Popup(
             onDismissRequest = onDismissRequest,
@@ -174,7 +175,8 @@ fun PlayerSelectionPopup(
                 clippingEnabled = true,
             ),
         ) {
-            Box(Modifier.fillMaxSize()) {
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                val screenWidthPx = constraints.maxWidth
                 // 遮罩：消费点击并收起菜单，不穿透
                 Box(
                     modifier = Modifier
@@ -184,6 +186,14 @@ fun PlayerSelectionPopup(
                             indication = null,
                         ) { onDismissRequest() }
                 )
+                val openUpward = menuMeasuredSize.height == 0 ||
+                    miuixAnchor.top - menuMeasuredSize.height >= 0
+                // 缩放原点跟着展开方向走：向上展开时钉住底边，向下展开时钉住顶边。
+                val scaleOrigin = if (openUpward) {
+                    TransformOrigin(0.5f, 1f)
+                } else {
+                    TransformOrigin(0.5f, 0f)
+                }
                 AnimatedVisibility(
                     visible = menuVisible,
                     // 倍速菜单的观感是「整块从小变大、底边钉住」：
@@ -192,26 +202,35 @@ fun PlayerSelectionPopup(
                     enter = fadeIn(tween(120)) + scaleIn(
                         animationSpec = tween(160),
                         initialScale = 0.85f,
-                        transformOrigin = TransformOrigin(0.5f, 1f),
+                        transformOrigin = scaleOrigin,
                     ),
                     exit = fadeOut(tween(90)) + scaleOut(
                         animationSpec = tween(90),
                         targetScale = 0.85f,
-                        transformOrigin = TransformOrigin(0.5f, 1f),
+                        transformOrigin = scaleOrigin,
                     ),
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .onSizeChanged { menuMeasuredSize = it }
                         .absoluteOffset {
+                            val w = if (menuMeasuredSize.width > 0) {
+                                menuMeasuredSize.width
+                            } else {
+                                menuWidthPx
+                            }
                             val h = if (menuMeasuredSize.height > 0) {
                                 menuMeasuredSize.height
                             } else {
                                 menuHeightPx
                             }
-                            IntOffset(
-                                miuixAnchor.left.coerceAtLeast(0),
-                                (miuixAnchor.top - h).coerceAtLeast(0),
-                            )
+                            // 纵向自动：上方空间够就向上展开，不够则改为向下（贴着按钮底部）。
+                            // 横向同理：右侧放不下就左边缘对齐按钮右边缘，避免被裁。
+                            val leftAligned = miuixAnchor.left.coerceAtLeast(0)
+                            val rightAligned = (miuixAnchor.right - w).coerceAtLeast(0)
+                            val x = if (leftAligned + w <= screenWidthPx) leftAligned else rightAligned
+                            val aboveY = miuixAnchor.top - h
+                            val y = if (aboveY >= 0) aboveY else miuixAnchor.bottom
+                            IntOffset(x, y)
                         },
                 ) {
                     AppSurface(
@@ -219,7 +238,9 @@ fun PlayerSelectionPopup(
                         // 容器若用 surfaceContainerHigh 就会露出来变成阶梯状色块；
                         // 这里跟行背景取同一档色，视觉上才是一整块。
                         color = MaterialTheme.colorScheme.surfaceContainer,
-                        shape = AppShapes.container(ContainerLevel.Card),
+                        // 与倍速 / 画面比例菜单对齐：它们走 AlertDialog，圆角用的是
+                        // M3 的 extraLarge；这里之前用 AppShapes.container(Card)，圆角偏小。
+                        shape = MaterialTheme.shapes.extraLarge,
                         border = BorderStroke(
                             width = 0.5.dp,
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
