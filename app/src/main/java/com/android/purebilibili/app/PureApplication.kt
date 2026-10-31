@@ -162,13 +162,24 @@ class PureApplication : Application(), SingletonImageLoader.Factory, ComponentCa
             isLowRamDevice = activityManager.isLowRamDevice
         )
         val diskCacheBytes = 100L * 1024 * 1024
+        // 图片请求集中在 i0/i1/i2.hdslb.com，默认每 host 只允许 5 个并发，
+        // 一屏几十张封面会排成几十批。这里不限制 per-host 并发，
+        // 交给 HTTP/2 多路复用自己调度（和 PiliPlus 的表现对齐）。
+        val imageCallFactory = NetworkModule.okHttpClient.newBuilder()
+            .dispatcher(
+                okhttp3.Dispatcher().apply {
+                    maxRequests = 128
+                    maxRequestsPerHost = 128
+                }
+            )
+            .build()
         return ImageLoader.Builder(this)
             .components {
                 add(com.android.purebilibili.core.util.BiliImageQualityInterceptor())
                 // 共享网络客户端及 DNS 策略，保留 HTTP 缓存头语义。
                 add(
                     OkHttpNetworkFetcherFactory(
-                        callFactory = { NetworkModule.okHttpClient },
+                        callFactory = { imageCallFactory },
                         cacheStrategy = { CacheControlCacheStrategy() },
                     )
                 )
