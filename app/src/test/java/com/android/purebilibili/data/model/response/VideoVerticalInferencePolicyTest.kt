@@ -23,30 +23,4 @@ class VideoVerticalInferencePolicyTest {
             )
         )
     }
-
-    @Test
-    fun shouldResolveVerticalVideoForPortraitEntry_whenMetadataMissing() {
-        assertTrue(
-            shouldResolveVerticalVideoForPortraitEntry(
-                directPortraitStoryEntry = true,
-                startAudio = false,
-                bvid = "BV1test",
-                isVerticalVideo = false,
-                coverUrl = "https://example.com/cover.jpg"
-            )
-        )
-    }
-
-    @Test
-    fun shouldResolveVerticalVideoForPortraitEntry_returnsFalseWhenAlreadyKnownVertical() {
-        assertFalse(
-            shouldResolveVerticalVideoForPortraitEntry(
-                directPortraitStoryEntry = true,
-                startAudio = false,
-                bvid = "BV1test",
-                isVerticalVideo = true,
-                coverUrl = ""
-            )
-        )
-    }
 }

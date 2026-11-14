@@ -1615,6 +1615,23 @@ class VideoCardTransitionBackgroundPolicyTest {
     }
 
     @Test
+    fun scaleGapFillSkipsOpaqueFloorWhenGlobalWallpaperBackdropVisible() {
+        // 全局壁纸开启时缩放间隙不再画不透明白/黑底，空隙露出主题 backing 色。
+        assertTrue(
+            shouldDrawVideoCardTransitionScaleGapFill(
+                contentScale = 0.96f,
+                wallpaperBackdropVisible = false,
+            )
+        )
+        assertFalse(
+            shouldDrawVideoCardTransitionScaleGapFill(
+                contentScale = 0.96f,
+                wallpaperBackdropVisible = true,
+            )
+        )
+    }
+
+    @Test
     fun navBackdropColorUsesScaleGapFloorDuringLowProgressGesture() {
         val base = androidx.compose.ui.graphics.Color.White
         val lowProgress = resolveVideoCardTransitionNavBackdropColor(

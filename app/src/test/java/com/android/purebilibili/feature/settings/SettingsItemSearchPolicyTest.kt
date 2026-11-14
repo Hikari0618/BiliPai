@@ -23,7 +23,22 @@ class SettingsItemSearchPolicyTest {
             val result = resolveSettingsSearchResults(item.title, Int.MAX_VALUE).first { it.settingId == item.settingId }
             assertEquals(item.title, result.title)
             assertEquals(item.sectionKey, result.focusId)
-            assertEquals(BiliPaiNavKey.SettingsCategory(item.page), resolveSettingsSearchNavigation(result))
+            assertEquals(BiliPaiNavKey.PlaybackSettings, resolveSettingsSearchNavigation(result))
+        }
+    }
+
+    @Test
+    fun performanceEntriesNavigateToTheVisibleHelpCategory() {
+        val entries = listOf(
+            "性能专项测试" to com.android.purebilibili.core.performance.PERFORMANCE_CAPTURE_SETTING_ID,
+            "查看性能摘要" to com.android.purebilibili.core.performance.PERFORMANCE_PREVIEW_SETTING_ID,
+        )
+        entries.forEach { (query, id) ->
+            val result = resolveSettingsSearchResults(query).first { it.settingId == id }
+            assertEquals(SettingsRootCategory.SYSTEM_ABOUT, result.page)
+            assertEquals(SettingsRootCategory.SYSTEM_ABOUT, canonicalSettingsRootCategory(result.page!!))
+            assertEquals(BiliPaiNavKey.SettingsCategory(SettingsRootCategory.SYSTEM_ABOUT), resolveSettingsSearchNavigation(result))
+            assertEquals("设置 / 帮助与关于 / 性能排查", result.path)
         }
     }
 

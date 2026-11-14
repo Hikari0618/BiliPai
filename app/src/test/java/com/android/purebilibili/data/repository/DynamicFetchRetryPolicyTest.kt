@@ -39,15 +39,15 @@ class DynamicFetchRetryPolicyTest {
     fun `friendly message maps 412 and risk`() {
         assertEquals(
             "请求过于频繁，请稍后重试",
-            resolveDynamicFriendlyErrorMessage(code = -412, message = "")
+            resolveBiliApiFriendlyErrorMessage(code = -412, message = "")
         )
         assertEquals(
             "触发风控，请稍后重试",
-            resolveDynamicFriendlyErrorMessage(code = -352, message = "")
+            resolveBiliApiFriendlyErrorMessage(code = -352, message = "")
         )
         assertEquals(
             "未登录，请先登录",
-            resolveDynamicFriendlyErrorMessage(code = -101, message = "")
+            resolveBiliApiFriendlyErrorMessage(code = -101, message = "")
         )
     }
 

@@ -6,10 +6,12 @@ import kotlin.test.assertTrue
 
 class VideoCardFloatingBackdropPolicyTest {
     @Test
-    fun glassStopsRecordingWhenNoChromeConsumesTheSource() {
-        for (exposure in VideoCardTransitionExposure.entries) {
-            for (video in listOf(false, true)) {
-                assertFalse(record(video = video, exposure = exposure))
+    fun allMaterialsStopRecordingWhenNoChromeConsumesTheSource() {
+        for (glass in listOf(false, true)) {
+            for (exposure in VideoCardTransitionExposure.entries) {
+                for (video in listOf(false, true)) {
+                    assertFalse(record(glass = glass, video = video, exposure = exposure))
+                }
             }
         }
     }
@@ -36,9 +38,11 @@ class VideoCardFloatingBackdropPolicyTest {
     }
 
     @Test
-    fun nativeMaterialsKeepTheirExistingRecordingPolicy() {
+    fun nativeMaterialsRetainRecordingForVisibleChrome() {
         for (exposure in VideoCardTransitionExposure.entries) {
-            assertTrue(record(glass = false, video = true, exposure = exposure))
+            assertTrue(record(glass = false, video = true, exposure = exposure, bottomBar = true))
+            assertTrue(record(glass = false, video = true, exposure = exposure, audio = true))
+            assertTrue(record(glass = false, video = true, exposure = exposure, consumer = true))
         }
     }
 

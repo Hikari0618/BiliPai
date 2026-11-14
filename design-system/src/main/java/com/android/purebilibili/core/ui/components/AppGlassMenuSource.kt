@@ -24,6 +24,7 @@ class AppGlassMenuSource internal constructor(
     internal val layer: GraphicsLayer,
 ) {
     internal var bounds by mutableStateOf<Rect?>(null)
+    val anchorBounds: Rect? get() = bounds
     internal var visible by mutableStateOf(true)
     internal var press: AppSingleChoicePopupPress? = null
     val isAvailable: Boolean get() = enabled && bounds?.isEmpty == false && !layer.isReleased
@@ -44,8 +45,14 @@ fun Modifier.appGlassMenuSource(
     enabled: Boolean = true,
     // 外层已捕获完整玻璃时，子控件只保留按住打开手势，不覆盖外层边界与图层。
     captureSurface: Boolean = true,
+    // 原生锚点菜单可显式记录位置；不启用玻璃快照或按住手势。
+    trackAnchorWhenDisabled: Boolean = false,
 ): Modifier {
-    if (!source.enabled) return this
+    if (!source.enabled) {
+        return if (trackAnchorWhenDisabled) {
+            onGloballyPositioned { source.bounds = it.boundsInWindow() }
+        } else this
+    }
     return this.composed {
         val pressModifier = rememberChoicePopupPressModifier(
             enabled = enabled && onOpen != null,
