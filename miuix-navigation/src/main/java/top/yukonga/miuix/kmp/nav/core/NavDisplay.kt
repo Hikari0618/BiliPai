@@ -25,6 +25,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.isSpecified
@@ -833,14 +834,15 @@ private fun NavDisplayLayout(
 
 /**
  * Bit layout of the packed per-host depth-bucket mask (see [NavEntryHost]): bits 0..2 carry the
- * [Lifecycle.State] ordinal of the lifecycle ceiling, the flag bits the three boolean gates. The
- * mask stays below 64 so the boxed derived value always hits the small-integer cache — the
+ * [Lifecycle.State] ordinal of the lifecycle ceiling, the flag bits the boolean gates. The
+ * mask stays below 128 so the boxed derived value always hits the small-integer cache — the
  * per-frame derived recompute allocates nothing.
  */
 private const val DEPTH_BUCKET_LIFECYCLE_MASK = 0b111
 private const val DEPTH_BUCKET_GOVERNS_OWN = 1 shl 3
 private const val DEPTH_BUCKET_CLIP_CORNERS = 1 shl 4
 private const val DEPTH_BUCKET_BLOCK_INPUT = 1 shl 5
+private const val DEPTH_BUCKET_CONTENT_VISIBLE = 1 shl 6
 
 // The entry host's two pointer filters MUST NOT share a pointerInput key. Dropping the conditional
 // blocker at settle makes the node chain update the surviving node in place, and that only restarts
@@ -899,10 +901,15 @@ private fun NavEntryHost(
     // each frame's float write re-runs only this calculation (pure math, allocation-free) while the
     // host recomposes solely on an actual threshold crossing. Raw per-frame floats are read only
     // inside the deferred graphicsLayer blocks installed below.
-    val depthBuckets by remember(presentation, entryIndex, entry, effects) {
+    val depthBuckets by remember(presentation, entryIndex, entry, effects, upperTransition) {
         derivedStateOf {
             val d = presentation.animatedTop.value - entryIndex
-            var mask = navMaxLifecycleFor(entry.presentation, d, presentation.gesture != null).ordinal
+            var mask = navMaxLifecycleFor(
+                entry.presentation, d, presentation.gesture != null, upperTransition.opaqueDepth,
+            ).ordinal
+            if (navEntryContentVisible(d, upperTransition.opaqueDepth, entry.presentation.isRemoving)) {
+                mask = mask or DEPTH_BUCKET_CONTENT_VISIBLE
+            }
             if (d <= 0f) mask = mask or DEPTH_BUCKET_GOVERNS_OWN
             if (effects.shouldClipCornersAt(d)) mask = mask or DEPTH_BUCKET_CLIP_CORNERS
             if (effects.shouldBlockInputAt(d)) mask = mask or DEPTH_BUCKET_BLOCK_INPUT
@@ -1017,14 +1024,21 @@ private fun NavEntryHost(
         }
     }
 
-    Box(modifier = entryModifier.then(clipModifier).then(blockInputModifier).then(opaqueInputModifier)) {
+    val contentVisible = (depthBuckets and DEPTH_BUCKET_CONTENT_VISIBLE) != 0
+    // 保留组合与布局供返回复用；完全遮挡后不再提交子树绘制与背景录制指令。
+    // 曝光只在边界变化时更新，弹层下仍露出的页沿用其 opaqueDepth。
+    val contentDrawModifier = if (contentVisible) Modifier else Modifier.drawWithContent { }
+    Box(modifier = entryModifier.then(clipModifier).then(contentDrawModifier).then(blockInputModifier).then(opaqueInputModifier)) {
         ProvideNavEntryBackScope(entryDispatcherOwner) {
             stateHolder.EntryStateContent(entry.contentKey) {
                 val vmOwner = rememberNavEntryViewModelStoreOwner(viewModelStores, entry.contentKey)
                 ProvideNavEntryViewModelStore(vmOwner) {
                     ProvideNavEntryLifecycle(lifecycleOwner) {
                         movableContent {
-                            CompositionLocalProvider(LocalNavTransitionScope provides transitionScope) {
+                            CompositionLocalProvider(
+                                LocalNavTransitionScope provides transitionScope,
+                                LocalNavEntryContentVisible provides contentVisible,
+                            ) {
                                 entry.Content()
                             }
                         }

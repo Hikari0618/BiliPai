@@ -41,6 +41,8 @@ internal fun VideoCardTransitionHostDepthLayer(
     sourceBoundsProvider: () -> Rect? = { null },
     /** 背景遮罩独立深度（引擎 maskAlpha 通道）；缺省跟随 [progressProvider]。 */
     maskProgressProvider: (() -> Float)? = null,
+    /** 全局壁纸开启时跳过不透明缩放间隙填充，空隙露出主题 backing 色与壁纸观感连贯。 */
+    wallpaperBackdropVisible: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val contentLayer = snapshotHandle.contentLayer
@@ -139,7 +141,11 @@ internal fun VideoCardTransitionHostDepthLayer(
                     rasterScale = snapshotHandle.prepareEffectLayer(this, fixedBlurRadiusPx),
                     blurRadiusPxOverride = fixedBlurRadiusPx,
                 )
-                if (shouldDrawVideoCardTransitionScaleGapFill(frame.contentScale)) {
+                if (shouldDrawVideoCardTransitionScaleGapFill(
+                        frame.contentScale,
+                        wallpaperBackdropVisible,
+                    )
+                ) {
                     drawRect(
                         resolveVideoCardTransitionScaleGapFillColor(
                             isLightBackground = frame.useLightScrimTint,

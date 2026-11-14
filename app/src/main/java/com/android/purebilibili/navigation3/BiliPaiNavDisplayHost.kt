@@ -1,5 +1,6 @@
 package com.android.purebilibili.navigation3
 
+import com.android.purebilibili.core.performance.performanceCaptureScroll
 import android.app.Application
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -28,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
@@ -259,6 +261,15 @@ internal fun BiliPaiNavDisplayHost(
         liveContainerSources.sources.keys.retainAll(stackSnapshot.toSet())
     }
     val currentKey = stackSnapshot.lastOrNull()
+    val performanceWindow = LocalView.current.rootView
+    val performanceDestination = remember(currentKey, activeMainHostRoute.takeIf { currentKey == BiliPaiNavKey.MainHost }) { Any() }
+    SideEffect {
+        com.android.purebilibili.core.performance.PerformanceCapture.setPage(
+            performanceWindow,
+            if (currentKey == BiliPaiNavKey.MainHost) activeMainHostRoute else currentKey?.toLegacyRoute(),
+            performanceDestination,
+        )
+    }
     val latestOnBack by rememberUpdatedState(onBack)
     val latestPrepareReturn by rememberUpdatedState(onPrepareVideoCardSharedReturn)
     val latestPrepareGesture by rememberUpdatedState(onPrepareVideoCardGesture)
@@ -834,6 +845,7 @@ internal fun BiliPaiNavDisplayHost(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .performanceCaptureScroll()
             .onGloballyPositioned { coordinates ->
                 settingsContainerSources.hostOrigin = coordinates.positionInRoot()
                 settingsContainerSources.hostSize = coordinates.size
@@ -863,35 +875,47 @@ internal fun BiliPaiNavDisplayHost(
             realtimeBlurEnabledProvider = { effectiveVideoCardBlurEnabled },
             sourceBoundsProvider = { sourceMetadata.sourceBounds },
             maskProgressProvider = { videoCardClock.maskProgress() },
+            wallpaperBackdropVisible = globalWallpaperVisible,
         )
-        @Suppress("UNCHECKED_CAST")
-        NavDisplay(
-            backStack = backStack as NavBackStack,
-            onBack = performBack,
-            onBackStarted = {
-                if (cardMorphAvailable && backStack.lastOrNull() is BiliPaiNavKey.VideoDetail) {
-                    latestPrepareGesture()
-                }
-            },
-            transition = globalTransition,
-            effects = effects,
-            backCompletionPolicy = if (cardMorphAvailable) VideoCardBackCompletionPolicy else null,
+        // content / onOpenCardContainer 是上游每次重组都会新建的 lambda 实例，直接放进
+        // remember 键会让下面的稳定化完全失效。用 rememberUpdatedState 包装成恒定引用：
+        // 调用时经状态读取拿最新实例，捕获值不经过 entryProvider 重建链路传播。
+        val latestOnOpenCardContainer by rememberUpdatedState(onOpenCardContainer)
+        val stableOnOpenCardContainer =
+            remember { { key: BiliPaiNavKey -> latestOnOpenCardContainer(key) } }
+        val latestNavEntryContent by rememberUpdatedState(content)
+        val stableNavEntryContent: @Composable (BiliPaiNavKey) -> Unit =
+            remember { { key: BiliPaiNavKey -> latestNavEntryContent(key) } }
+        // 内容 lambda 以前只作为 NavDisplay 的尾部字面量存在：宿主任何一次无关重组
+        //（曝光边界、设置流、窗口焦点……）都会生成新实例，令 entryProvider 与全部
+        // NavEntry 连带重建、所有在场 entry 的宿主跟着重组。这里按真实输入 remember，
+        // 只有导航栈 / 转场对象 / 提供给 entry 的可见性等输入真正变化时才重建。
+        val navEntryContent: @Composable (BiliPaiNavKey) -> Unit = remember(
+            stableOnOpenCardContainer,
+            liveContainerEnabled,
+            settingsContainerEnabled,
+            settingsContainerMorphEnabled,
+            settingsContainerSources,
+            liveContainerSources,
+            liveContainerTransitions,
+            globalWallpaperVisible,
+            activeMainHostRoute,
+            videoCardClock,
+            transitionBackgroundState,
+            miuixCardTransitionState,
+            predictiveBackBackgroundState,
+            videoCardTransitionEnabled,
+            performBack,
+            interceptPredictiveBack,
+            stackSnapshot,
+            sourceMetadata,
+            clickToPlayEnabled,
+            dynamicImagePreviewTextVisible,
+            dynamicCommentPreviewVisible,
+            application,
+            stableNavEntryContent,
         ) {
-            biliPaiNavEntries(
-                swipeBackDirection = swipeBackDirection,
-                settingsBackStack = stackSnapshot,
-                settingsPersistentPanes = settingsPersistentPanes,
-                settingsContainerTransitions = settingsContainerTransitions,
-                settingsMorphFallback = if (settingsContainerEnabled) {
-                    top.yukonga.miuix.kmp.nav.transition.NavTransitions.MiuixDefault
-                } else null,
-                liveContainerTransitions = liveContainerTransitions,
-                activeMainHostRoute = activeMainHostRoute,
-                pageTransition = globalTransition,
-                predictiveBackExcludedTransition = predictiveBackExcludedTransition,
-                videoCardTransition = videoCardTransition,
-                fullscreenVideoCardTransition = fullscreenVideoCardTransition,
-            ) { key ->
+            { key ->
                 // 返回尚未落位时可开始另一张卡片的转场。旧 entry 保留自身的文字、
                 // 几何和进度驱动，不能因同样来自首页而接收新卡片的快照。
                 var retainedCardTransition by remember(key) {
@@ -915,7 +939,7 @@ internal fun BiliPaiNavDisplayHost(
                     onBack = performBack,
                 ) {
                     CompositionLocalProvider(
-                        com.android.purebilibili.core.ui.LocalNativeCardNavigate provides onOpenCardContainer,
+                        com.android.purebilibili.core.ui.LocalNativeCardNavigate provides stableOnOpenCardContainer,
                         com.android.purebilibili.core.ui.LocalNativeArticleCardMotionEnabled provides liveContainerEnabled,
                         com.android.purebilibili.feature.space.LocalShopContainerMotionEnabled provides
                             (liveContainerEnabled && settingsContainerMorphEnabled),
@@ -953,12 +977,59 @@ internal fun BiliPaiNavDisplayHost(
                                         Modifier.globalWallpaperAwareBackground()
                                     } else Modifier
                                 ),
-                            ) { content(key) }
+                            ) { stableNavEntryContent(key) }
                         }
                     }
                 }
             }
         }
+        val navDisplayContent: top.yukonga.miuix.kmp.nav.core.NavEntryBuilder.() -> Unit = remember(
+            swipeBackDirection,
+            stackSnapshot,
+            settingsPersistentPanes,
+            settingsContainerTransitions,
+            liveContainerTransitions,
+            settingsContainerEnabled,
+            activeMainHostRoute,
+            globalTransition,
+            predictiveBackExcludedTransition,
+            videoCardTransition,
+            fullscreenVideoCardTransition,
+            navEntryContent,
+        ) {
+            {
+                biliPaiNavEntries(
+                    swipeBackDirection = swipeBackDirection,
+                    settingsBackStack = stackSnapshot,
+                    settingsPersistentPanes = settingsPersistentPanes,
+                    settingsContainerTransitions = settingsContainerTransitions,
+                    settingsMorphFallback = if (settingsContainerEnabled) {
+                        top.yukonga.miuix.kmp.nav.transition.NavTransitions.MiuixDefault
+                    } else null,
+                    liveContainerTransitions = liveContainerTransitions,
+                    activeMainHostRoute = activeMainHostRoute,
+                    pageTransition = globalTransition,
+                    predictiveBackExcludedTransition = predictiveBackExcludedTransition,
+                    videoCardTransition = videoCardTransition,
+                    fullscreenVideoCardTransition = fullscreenVideoCardTransition,
+                    content = navEntryContent,
+                )
+            }
+        }
+        @Suppress("UNCHECKED_CAST")
+        NavDisplay(
+            backStack = backStack as NavBackStack,
+            onBack = performBack,
+            onBackStarted = {
+                if (cardMorphAvailable && backStack.lastOrNull() is BiliPaiNavKey.VideoDetail) {
+                    latestPrepareGesture()
+                }
+            },
+            transition = globalTransition,
+            effects = effects,
+            backCompletionPolicy = if (cardMorphAvailable) VideoCardBackCompletionPolicy else null,
+            content = navDisplayContent,
+        )
     }
 }
 
@@ -974,7 +1045,42 @@ private fun BiliPaiMiuixNavEntry(
         isBackEnabled = interceptPredictiveBack,
         onBackCompleted = onBack,
     )
-    com.android.purebilibili.core.ui.animation.ProvideNavigationEntranceState(content)
+    val performanceOwner = remember { Any() }
+    val performanceWindow = LocalView.current.rootView
+    val performanceTransition = LocalNavTransitionScope.current
+    val navigationTransitionRunning = performanceTransition.isRunning
+    val performanceGestureActive by remember(performanceTransition) {
+        derivedStateOf(structuralEqualityPolicy()) { performanceTransition.gesture != null }
+    }
+    val performancePhase = performanceTransition.settle?.phase?.name
+    val performanceChange = if (performanceGestureActive || performancePhase == "Commit" || performancePhase == "Cancel") {
+        "gesture_back"
+    } else when (performanceTransition.change) {
+        top.yukonga.miuix.kmp.nav.runtime.NavChange.None -> "none"
+        top.yukonga.miuix.kmp.nav.runtime.NavChange.Push -> "push"
+        top.yukonga.miuix.kmp.nav.runtime.NavChange.Pop -> "pop"
+        is top.yukonga.miuix.kmp.nav.runtime.NavChange.MultiPush -> "multi_push"
+        is top.yukonga.miuix.kmp.nav.runtime.NavChange.MultiPop -> "multi_pop"
+        top.yukonga.miuix.kmp.nav.runtime.NavChange.Replace -> "replace"
+        top.yukonga.miuix.kmp.nav.runtime.NavChange.ReplaceAll -> "replace_all"
+    }
+    SideEffect {
+        com.android.purebilibili.core.performance.PerformanceCapture.setTransition(performanceWindow, performanceOwner, navigationTransitionRunning, performanceChange, performancePhase)
+    }
+    DisposableEffect(performanceWindow, performanceOwner) {
+        onDispose { com.android.purebilibili.core.performance.PerformanceCapture.setTransition(performanceWindow, performanceOwner, false, disposed = true) }
+    }
+    val exposed = top.yukonga.miuix.kmp.nav.core.LocalNavEntryContentVisible.current
+    // 材质共用曝光边界：遮挡后暂停图片与背景录制，返回手势露出时恢复。
+    // 不以 RESUMED 替代曝光，否则转场中仍可见的两页会丢失背景采样。
+    CompositionLocalProvider(
+        com.android.purebilibili.core.ui.components.LocalPageImageLoadingAllowed provides
+            (com.android.purebilibili.core.ui.components.LocalPageImageLoadingAllowed.current && exposed),
+        com.android.purebilibili.core.ui.blur.LocalChromeBackdropRecordingAllowed provides
+            (com.android.purebilibili.core.ui.blur.LocalChromeBackdropRecordingAllowed.current && exposed),
+    ) {
+        com.android.purebilibili.core.ui.animation.ProvideNavigationEntranceState(content)
+    }
 }
 
 @Composable

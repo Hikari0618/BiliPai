@@ -14,4 +14,21 @@ class NavEntryLifecycleTest {
         assertEquals(Lifecycle.State.STARTED, navMaxLifecycleFor(entry, -0.75f, false))
         assertEquals(Lifecycle.State.RESUMED, navMaxLifecycleFor(entry, 0f, false))
     }
+
+    @Test
+    fun opaqueDestinationStopsCoveredCollectorsAndBackPreviewRestartsThem() {
+        val entry = NavPresentationState(role = NavRole.Covered, isRemoving = false)
+        assertEquals(Lifecycle.State.STARTED, navMaxLifecycleFor(entry, 0.99f, false))
+        assertEquals(Lifecycle.State.CREATED, navMaxLifecycleFor(entry, 1f, false))
+        assertEquals(Lifecycle.State.STARTED, navMaxLifecycleFor(entry, 0.99f, true))
+        assertEquals(Lifecycle.State.CREATED, navMaxLifecycleFor(entry, 1f, false))
+        assertEquals(Lifecycle.State.RESUMED, navMaxLifecycleFor(entry, 0f, false))
+    }
+
+    @Test
+    fun modalKeepsExposedSourceStarted() {
+        val entry = NavPresentationState(role = NavRole.Covered, isRemoving = false)
+        assertEquals(Lifecycle.State.STARTED, navMaxLifecycleFor(entry, 1f, false, opaqueDepth = 2f))
+        assertEquals(Lifecycle.State.CREATED, navMaxLifecycleFor(entry, 2f, false, opaqueDepth = 2f))
+    }
 }

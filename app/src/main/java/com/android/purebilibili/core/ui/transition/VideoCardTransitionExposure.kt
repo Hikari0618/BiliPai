@@ -42,7 +42,7 @@ internal fun shouldDeferVideoCardSourceHeavyWork(
     exposure: VideoCardTransitionExposure,
 ): Boolean = exposure != VideoCardTransitionExposure.Idle
 
-/** 玻璃背景只在控件或其进出场需要时录制；完全被详情覆盖的底栏不算消费者。 */
+/** 各材质都只为实际消费者录制；玻璃卡片落位后再排除被详情覆盖的底栏。 */
 internal fun shouldRecordVideoCardFloatingBackdrop(
     liquidGlassEnabled: Boolean,
     isVideoDetailDestination: Boolean,
@@ -50,8 +50,8 @@ internal fun shouldRecordVideoCardFloatingBackdrop(
     hasBottomBarConsumer: Boolean,
     hasAudioBarConsumer: Boolean,
     hasFloatingConsumer: Boolean,
-): Boolean = !liquidGlassEnabled || hasAudioBarConsumer || hasFloatingConsumer ||
-    (hasBottomBarConsumer && (!isVideoDetailDestination ||
+): Boolean = hasAudioBarConsumer || hasFloatingConsumer ||
+    (hasBottomBarConsumer && (!liquidGlassEnabled || !isVideoDetailDestination ||
         exposure != VideoCardTransitionExposure.SettledHidden))
 
 internal data class VideoCardTransitionRenderDecision(

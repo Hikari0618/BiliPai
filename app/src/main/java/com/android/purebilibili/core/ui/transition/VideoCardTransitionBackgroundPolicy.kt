@@ -679,6 +679,7 @@ internal fun Modifier.videoCardTransitionLiveBackgroundEffect(
     realtimeBlurEnabledProvider: () -> Boolean = { false },
     scaleReductionProvider: () -> Float = { VIDEO_CARD_TRANSITION_RELATED_SCALE_REDUCTION },
     sourceBoundsProvider: () -> Rect? = { null },
+    wallpaperBackdropVisibleProvider: () -> Boolean = { false },
 ): Modifier {
     val view = LocalView.current
     val screenDensity = LocalDensity.current.density
@@ -736,7 +737,11 @@ internal fun Modifier.videoCardTransitionLiveBackgroundEffect(
     return this
         .drawWithContent {
             val frame = frameState.value
-            if (shouldDrawVideoCardTransitionScaleGapFill(frame.contentScale)) {
+            if (shouldDrawVideoCardTransitionScaleGapFill(
+                    frame.contentScale,
+                    wallpaperBackdropVisibleProvider(),
+                )
+            ) {
                 drawRect(
                     resolveVideoCardTransitionScaleGapFillColor(
                         isLightBackground = frame.useLightScrimTint,
@@ -852,9 +857,14 @@ internal fun resolveVideoCardTransitionNavBackdropColor(
 /**
  * 景深 scale<1 时，缩放层四周会露出父级/窗口底色。
  * 用与 blur scrim 同向的不透明填充盖住空隙，避免预测性返回读成右侧白条。
+ * 全局壁纸开启时不画：不透明白/黑填充会压住壁纸底色，缩放边缘露出与壁纸
+ * 不一致的一圈实色；跳过后空隙露出主题 backing 色，与来源页壁纸观感连贯。
  */
-internal fun shouldDrawVideoCardTransitionScaleGapFill(contentScale: Float): Boolean {
-    return contentScale < 0.999f
+internal fun shouldDrawVideoCardTransitionScaleGapFill(
+    contentScale: Float,
+    wallpaperBackdropVisible: Boolean = false,
+): Boolean {
+    return contentScale < 0.999f && !wallpaperBackdropVisible
 }
 
 internal fun resolveVideoCardTransitionScaleGapFillColor(
@@ -936,6 +946,7 @@ internal fun Modifier.videoCardTransitionBackgroundEffect(
     sourceBoundsProvider: () -> Rect? = { null },
     snapshotHandle: VideoCardTransitionSnapshotHandle? = null,
     reuseJustRecordedSourceForHandoff: Boolean = false,
+    wallpaperBackdropVisibleProvider: () -> Boolean = { false },
 ): Modifier {
     val isHostOwnedSnapshot = snapshotHandle != null
     // A host-owned handle already supplies both resources; allocate the fallback only when
@@ -1275,7 +1286,11 @@ internal fun Modifier.videoCardTransitionBackgroundEffect(
             rasterScale = effectiveSnapshotHandle.prepareEffectLayer(this, fixedBlurRadiusPx),
             blurRadiusPxOverride = fixedBlurRadiusPx,
         )
-        if (!liveHandoffActive && shouldDrawVideoCardTransitionScaleGapFill(frame.contentScale)) {
+        if (!liveHandoffActive && shouldDrawVideoCardTransitionScaleGapFill(
+                frame.contentScale,
+                wallpaperBackdropVisibleProvider(),
+            )
+        ) {
             drawRect(
                 resolveVideoCardTransitionScaleGapFillColor(
                     isLightBackground = frame.useLightScrimTint,

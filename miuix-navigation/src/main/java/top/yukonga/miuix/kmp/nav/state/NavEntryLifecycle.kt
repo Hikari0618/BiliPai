@@ -17,12 +17,14 @@ import top.yukonga.miuix.kmp.nav.core.NavPresentationState
  * design doc §5.3:
  *
  * - top steady state -> [Lifecycle.State.RESUMED]
- * - covered layer    -> [Lifecycle.State.STARTED]
+ * - partially exposed covered layer -> [Lifecycle.State.STARTED]
+ * - fully occluded layer -> [Lifecycle.State.CREATED]
  * - being removed     -> [Lifecycle.State.CREATED]
  * - outside the presentation window while composed -> [Lifecycle.State.CREATED]
  *
  * The `0.5` threshold splits "top" from "covered": a settled top sits at `d = 0` (RESUMED) while
- * the first covered layer sits at `d = 1` (STARTED). An incoming entry above the top
+ * the first covered layer sits at `d = 1` (CREATED for an opaque destination,
+ * STARTED beneath a modal with a larger opaque depth). An incoming entry above the top
  * (`-1 < d < -0.5`, not removing) is STARTED while it slides in. An entry outside the
  * presentation window stays CREATED until its composition is disposed. Animated depth can
  * reverse, while DESTROYED is terminal and cannot be resumed.
@@ -38,10 +40,17 @@ import top.yukonga.miuix.kmp.nav.core.NavPresentationState
  *   read by this mapping (role does not affect the lifecycle ceiling).
  * @param d the entry's relative depth (`animatedTop - entryIndex`).
  * @param gestureActive whether an interactive gesture currently owns the driving float.
+ * @param opaqueDepth depth at which the upper transition fully occludes this entry.
  * @return the lifecycle ceiling for this entry.
  */
-internal fun navMaxLifecycleFor(presentation: NavPresentationState, d: Float, gestureActive: Boolean): Lifecycle.State = when {
+internal fun navMaxLifecycleFor(
+    presentation: NavPresentationState,
+    d: Float,
+    gestureActive: Boolean,
+    opaqueDepth: Float = 1f,
+): Lifecycle.State = when {
     d <= -1f -> Lifecycle.State.CREATED
+    d >= opaqueDepth -> Lifecycle.State.CREATED
     presentation.isRemoving -> Lifecycle.State.CREATED
     d < -0.5f -> Lifecycle.State.STARTED
     d < 0.5f -> if (gestureActive) Lifecycle.State.STARTED else Lifecycle.State.RESUMED

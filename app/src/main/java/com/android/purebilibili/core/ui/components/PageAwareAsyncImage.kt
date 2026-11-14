@@ -13,6 +13,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -29,6 +30,7 @@ import coil3.request.crossfade
 import com.android.purebilibili.core.store.DataSaverState
 import com.android.purebilibili.core.util.withBiliImageQuality
 import com.android.purebilibili.feature.home.LocalHomeCardCoverLoadingAllowed
+import com.android.purebilibili.feature.home.components.cards.LocalHomeCardScrolling
 
 /** 页面覆盖、滚动及返回时频繁切换，只使实际读取加载许可的组件失效。 */
 internal val LocalPageImageLoadingAllowed = compositionLocalOf { true }
@@ -47,6 +49,7 @@ internal fun PageAwareAsyncImage(
     alignment: Alignment = Alignment.Center,
     loadingAllowed: Boolean = LocalPageImageLoadingAllowed.current,
     dimInDarkTheme: Boolean = false,
+    colorFilter: ColorFilter? = null,
     onError: ((AsyncImagePainter.State.Error) -> Unit)? = null,
     onSuccess: ((AsyncImagePainter.State.Success) -> Unit)? = null,
 ) {
@@ -59,7 +62,7 @@ internal fun PageAwareAsyncImage(
         } else {
             PageAwareAsyncImageContent(
                 model, contentDescription, modifier, imageLoader, contentScale, alignment,
-                loadingAllowed, dimInDarkTheme, onError, onSuccess, memory,
+                loadingAllowed, dimInDarkTheme, onError, onSuccess, memory, colorFilter,
             )
         }
     }
@@ -78,12 +81,13 @@ private fun PageAwareAsyncImageContent(
     onError: ((AsyncImagePainter.State.Error) -> Unit)?,
     onSuccess: ((AsyncImagePainter.State.Success) -> Unit)?,
     memory: PageImageMemory,
+    colorFilter: ColorFilter?,
 ) {
     val context = LocalContext.current
     val resolvedImageLoader = imageLoader ?: context.imageLoader
     val imageSettings = LocalContentImageSettings.current
     val darkTheme = LocalContentImageDarkTheme.current
-    val imageFilter = remember(dimInDarkTheme, darkTheme, imageSettings.darkDimPercent) {
+    val imageFilter = colorFilter ?: remember(dimInDarkTheme, darkTheme, imageSettings.darkDimPercent) {
         contentImageDimFilter(dimInDarkTheme && darkTheme, imageSettings.darkDimPercent)
     }
     // 请求和暂停时的缓存回放使用同一质量身份，避免返回列表时丢失封面占位。
@@ -110,7 +114,9 @@ private fun PageAwareAsyncImageContent(
         }
     } else null
     val revealGate = if (homeFeedImage) com.android.purebilibili.core.ui.rememberDecorativeAnimationGate() else null
-    val revealAllowed = loadingAllowed && revealGate?.active == true
+    // 首页滚动中网络封面直接显示；停下后不补播，已开始的淡入也随滚动取消并落位。
+    val revealAllowed = loadingAllowed && revealGate?.active == true &&
+        LocalHomeCardScrolling.current?.value != true
     if (reveal != null) {
         LaunchedEffect(reveal, reveal.pending, revealAllowed) {
             reveal.finish(revealAllowed)

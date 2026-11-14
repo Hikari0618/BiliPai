@@ -463,6 +463,7 @@ class ChromeBackdropSourceUiRegressionTest {
     fun wallpaperStaysAlignedWhenRetainedPageMovesAndReturns() {
         assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
         val pageOffsetPx = mutableStateOf(0)
+        val ancestorOffsetPx = mutableStateOf(0)
         composeRule.setContent {
             val source = rememberChromeBackdropSource(drawContentToScreen = false)
             Box(Modifier.size(100.dp).clipToBounds().testTag("wallpaper-result")) {
@@ -478,26 +479,30 @@ class ChromeBackdropSourceUiRegressionTest {
                     LocalGlobalWallpaperBackdropVisible provides true,
                     LocalGlobalWallpaperBackdropSource provides source,
                 ) {
-                    Box(
-                        Modifier.matchParentSize()
-                            .offset { IntOffset(pageOffsetPx.value, 0) }
-                            .sharedGlobalWallpaperBackground(Color.Black),
-                    )
+                    Box(Modifier.matchParentSize().offset { IntOffset(ancestorOffsetPx.value, 0) }) {
+                        Box(
+                            Modifier.matchParentSize()
+                                .offset { IntOffset(pageOffsetPx.value, 0) }
+                                .sharedGlobalWallpaperBackground(Color.Black),
+                        )
+                    }
                 }
             }
         }
         composeRule.waitForIdle()
         val width = composeRule.onNodeWithTag("wallpaper-result").captureToImage().width
         // Move through layout only, retaining the same composition and coordinate object.
-        for (offset in listOf(0, width / 4, 0, -width / 4, 0)) {
-            composeRule.runOnIdle { pageOffsetPx.value = offset }
-            composeRule.waitForIdle()
-            val pixels = composeRule.onNodeWithTag("wallpaper-result")
-                .captureToImage().toPixelMap()
-            assertPixelColor(Color.Red, pixels[width * 2 / 5, pixels.height / 2])
-            assertPixelColor(Color.Green, pixels[width * 3 / 5, pixels.height / 2])
-            if (offset == 0) {
-                assertPixelColor(Color.Red, pixels[width / 10, pixels.height / 2])
+        for (movingOffset in listOf(pageOffsetPx, ancestorOffsetPx)) {
+            for (offset in listOf(0, width / 4, 0, -width / 4, 0)) {
+                composeRule.runOnIdle { movingOffset.value = offset }
+                composeRule.waitForIdle()
+                val pixels = composeRule.onNodeWithTag("wallpaper-result")
+                    .captureToImage().toPixelMap()
+                assertPixelColor(Color.Red, pixels[width * 2 / 5, pixels.height / 2])
+                assertPixelColor(Color.Green, pixels[width * 3 / 5, pixels.height / 2])
+                if (offset == 0) {
+                    assertPixelColor(Color.Red, pixels[width / 10, pixels.height / 2])
+                }
             }
         }
     }
