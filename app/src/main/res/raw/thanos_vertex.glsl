@@ -31,6 +31,8 @@ uniform float dp;
 uniform vec2 offset;
 uniform float scale;
 uniform float uvOffset;
+// 0 = 自左向右扫描（上游默认），1 = 自右向左扫描。
+uniform float sweepReversed;
 
 #define noiseScale   12.0
 #define noiseSpeed    0.6
@@ -63,7 +65,8 @@ void main() {
   }
 
   float effectFraction =   max(0.0, min(0.35, time)) / 0.35;
-  float particleFraction = max(0.0, min(0.2, .1 + time - uv.x * uvOffset)) / 0.2;
+  float sweepX = mix(uv.x, 1.0 - uv.x, sweepReversed);
+  float particleFraction = max(0.0, min(0.2, .1 + time - sweepX * uvOffset)) / 0.2;
   position += velocity * deltaTime * particleFraction;
   velocity += vec2(19.0 * (velocity.x > 0.0 ? 1.0 : -1.0) * (1.0 - effectFraction), -65.0) * deltaTime * dp * particleFraction;
   particleTime = max(0.0, particleTime - 1.2 * deltaTime * particleFraction);

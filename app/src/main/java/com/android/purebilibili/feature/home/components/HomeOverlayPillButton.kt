@@ -28,11 +28,13 @@ internal fun HomeOverlayPillButton(
     overlayPillColors: HomeGlassResolvedColors,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     content: @Composable RowScope.() -> Unit,
 ) {
     AppButton(
         onClick = onClick,
         modifier = modifier,
+        enabled = enabled,
         shape = AppShapes.container(ContainerLevel.Pill),
         containerColor = overlayPillColors.containerColor,
         contentColor = AppContentColors.primaryText(),
