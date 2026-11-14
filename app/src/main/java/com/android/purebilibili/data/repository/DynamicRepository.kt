@@ -454,7 +454,7 @@ object DynamicRepository {
                 if (updateResponse.code != 0) {
                     return@withContext Result.failure(
                         Exception(
-                            resolveDynamicFriendlyErrorMessage(
+                            resolveBiliApiFriendlyErrorMessage(
                                 updateResponse.code,
                                 updateResponse.message
                             )

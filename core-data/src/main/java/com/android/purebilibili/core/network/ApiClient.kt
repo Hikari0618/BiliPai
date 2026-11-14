@@ -1531,7 +1531,7 @@ interface BilibiliApi {
         @retrofit2.http.Field("access_key") accessKey: String? = null
     ): SimpleApiResponse
     
-    //  [新增] 投币
+    //  [新增] 投币（Web 端点；风控严格，第三方客户端常返回"非法访问"，仅作无 App token 时的回退）
     @retrofit2.http.FormUrlEncoded
     @retrofit2.http.POST("x/web-interface/coin/add")
     suspend fun coinVideo(
@@ -1539,6 +1539,20 @@ interface BilibiliApi {
         @retrofit2.http.Field("multiply") multiply: Int,       // 投币数量 1 或 2
         @retrofit2.http.Field("select_like") selectLike: Int,  // 1=同时点赞, 0=不点赞
         @retrofit2.http.Field("csrf") csrf: String
+    ): SimpleApiResponse
+
+    //  投币（App 端点；access_key + appkey/ts/sign 鉴权，第三方客户端可用路径）
+    @retrofit2.http.Headers("Referer: https://www.bilibili.com")
+    @retrofit2.http.FormUrlEncoded
+    @retrofit2.http.POST("https://app.bilibili.com/x/v2/view/coin/add")
+    suspend fun coinVideoApp(
+        @retrofit2.http.Field("aid") aid: String,
+        @retrofit2.http.Field("multiply") multiply: String,       // 投币数量 1 或 2
+        @retrofit2.http.Field("select_like") selectLike: String,  // 1=同时点赞, 0=不点赞
+        @retrofit2.http.Field("access_key") accessKey: String,
+        @retrofit2.http.Field("appkey") appkey: String,
+        @retrofit2.http.Field("ts") ts: String,
+        @retrofit2.http.Field("sign") sign: String
     ): SimpleApiResponse
     
     //  [新增] 查询已投币数
@@ -3412,6 +3426,7 @@ object NetworkModule {
 
     val okHttpClient: OkHttpClient by lazy {
         val builder = OkHttpClient.Builder()
+            .addInterceptor(TransientGetRetryInterceptor)
             .addInterceptor(ResponseCompressionInterceptor)
             .protocols(resolveSharedNetworkProtocols())
             .proxySelector(buildAppProxySelector())

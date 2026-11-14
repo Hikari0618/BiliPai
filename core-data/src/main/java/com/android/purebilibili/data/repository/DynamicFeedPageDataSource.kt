@@ -20,7 +20,7 @@ object DynamicFeedPageDataSource {
                     delay(resolveDynamicRetryDelayMs(attempt))
                     continue
                 }
-                val message = resolveDynamicFriendlyErrorMessage(response.code, response.message)
+                val message = resolveBiliApiFriendlyErrorMessage(response.code, response.message)
                 return Result.failure(ContentRequestException(response.code, message))
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
@@ -32,11 +32,11 @@ object DynamicFeedPageDataSource {
                     delay(resolveDynamicRetryDelayMs(attempt))
                     continue
                 }
-                val message = resolveDynamicFriendlyErrorMessage(code = -1, message = error.message.orEmpty())
+                val message = resolveBiliApiFriendlyErrorMessage(code = -1, message = error.message.orEmpty())
                 return Result.failure(Exception(message, error))
             }
         }
-        val message = resolveDynamicFriendlyErrorMessage(code = -1, message = lastError?.message.orEmpty())
+        val message = resolveBiliApiFriendlyErrorMessage(code = -1, message = lastError?.message.orEmpty())
         return Result.failure(Exception(message, lastError))
     }
 }

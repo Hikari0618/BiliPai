@@ -1036,15 +1036,37 @@ object ActionRepository {
         return try {
             withContext(Dispatchers.IO) {
             try {
-                val csrf = TokenManager.csrfCache ?: ""
-                if (csrf.isEmpty()) {
-                    return@withContext Result.failure(Exception("请先登录"))
-                }
-                
                 val selectLike = if (alsoLike) 1 else 0
-                val response = api.coinVideo(aid = aid, multiply = count, selectLike = selectLike, csrf = csrf)
+                // App 端点（access_key + appkey/ts/sign）优先：Web 端点 coin/add 对第三方
+                // 客户端风控严格，常返回"非法访问"；无 App token（纯网页 Cookie 登录）时回退 Web。
+                val response = if (!TokenManager.accessTokenCache.isNullOrBlank()) {
+                    val signed = AppSignUtils.signForAndroidHdLogin(
+                        mapOf(
+                            "access_key" to TokenManager.accessTokenCache.orEmpty(),
+                            "aid" to aid.toString(),
+                            "multiply" to count.toString(),
+                            "select_like" to selectLike.toString(),
+                            "ts" to AppSignUtils.getTimestamp().toString(),
+                        )
+                    )
+                    api.coinVideoApp(
+                        aid = signed.getValue("aid"),
+                        multiply = signed.getValue("multiply"),
+                        selectLike = signed.getValue("select_like"),
+                        accessKey = signed.getValue("access_key"),
+                        appkey = signed.getValue("appkey"),
+                        ts = signed.getValue("ts"),
+                        sign = signed.getValue("sign"),
+                    )
+                } else {
+                    val csrf = TokenManager.csrfCache ?: ""
+                    if (csrf.isEmpty()) {
+                        return@withContext Result.failure(Exception("请先登录"))
+                    }
+                    api.coinVideo(aid = aid, multiply = count, selectLike = selectLike, csrf = csrf)
+                }
                 com.android.purebilibili.core.util.Logger.d("ActionRepository", " coinVideo: aid=$aid, count=$count, code=${response.code}")
-                
+
                 when (response.code) {
                     0 -> {
                         if (session != interactionSession() ||

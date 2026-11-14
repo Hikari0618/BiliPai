@@ -41,7 +41,8 @@ fun resolveDynamicRetryDelayMs(attempt: Int): Long {
     }
 }
 
-fun resolveDynamicFriendlyErrorMessage(code: Int, message: String): String {
+/** 全站通用的 Bilibili API 错误转义：未登录/风控/限频给可读文案，其余原样透出。 */
+fun resolveBiliApiFriendlyErrorMessage(code: Int, message: String): String {
     return when {
         code == -101 -> "未登录，请先登录"
         isDynamicRiskControlApiError(code = code, message = message) ->

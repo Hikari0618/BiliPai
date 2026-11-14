@@ -1,5 +1,7 @@
 package com.android.purebilibili.feature.search
 
+import androidx.compose.foundation.background
+
 import com.android.purebilibili.core.util.LocalWindowSizeClass
 import com.android.purebilibili.core.ui.AppContentColors
 
@@ -86,6 +88,7 @@ fun SearchVideoFilterBar(
     miuixBackdrop: MiuixBackdrop? = null,
 ): Unit = AppExactTouchTargets {
     val orderOptions = remember { resolveSearchVideoOrderOptions() }
+    val miuixNonGlass = com.android.purebilibili.core.ui.isMiuixNonGlassEnabled()
     val centerWideFilters = LocalWindowSizeClass.current.let { it.isTabletDevice && it.isTablet }
     Row(
         modifier = modifier
@@ -106,6 +109,10 @@ fun SearchVideoFilterBar(
                     .clip(com.android.purebilibili.core.ui.AppShapes.container(
                         com.android.purebilibili.core.ui.ContainerLevel.Tag
                     ))
+                    // 原生 Miuix 与上方搜索分类共用中性选中配色，玻璃与 MD3 保留各自样式。
+                    .then(if (miuixNonGlass && selected) Modifier.background(
+                        com.android.purebilibili.core.ui.AppSurfaceTokens.secondaryContainer()
+                    ) else Modifier)
                     .appActionClickable(role = Role.Button, onClick = { onOrderChange(order) })
                     .padding(horizontal = 11.dp),
                 contentAlignment = Alignment.Center,
@@ -113,7 +120,9 @@ fun SearchVideoFilterBar(
                 AppText(
                     text = localizedSearchOrderLabel(order),
                     style = MaterialTheme.typography.labelMedium,
-                    color = if (selected) {
+                    color = if (selected && miuixNonGlass) {
+                        com.android.purebilibili.core.ui.AppSurfaceTokens.onSecondaryContainer()
+                    } else if (selected) {
                         com.android.purebilibili.core.ui.AppSurfaceTokens.primary()
                     } else {
                         com.android.purebilibili.core.ui.AppSurfaceTokens.onSurfaceVariantSummary()
