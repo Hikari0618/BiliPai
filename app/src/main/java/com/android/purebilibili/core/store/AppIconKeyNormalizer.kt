@@ -32,9 +32,6 @@ private val CANONICAL_APP_ICON_KEYS = setOf(
     "icon_bilipai_pink",
     "icon_bilipai_white",
     BILIPAI_THEME_ICON_KEY,
-    "icon_bilipai_violet",
-    "icon_bilipai_green",
-    "icon_bilipai_ink",
     "icon_bilipai_monet"
 )
 
@@ -46,9 +43,6 @@ private val LAUNCHER_ALIAS_SUFFIX_BY_KEY = mapOf(
     "icon_bilipai" to "MainActivityAliasBiliPai",
     "icon_bilipai_pink" to "MainActivityAliasBiliPaiPink",
     "icon_bilipai_white" to "MainActivityAliasBiliPaiWhite",
-    "icon_bilipai_violet" to "MainActivityAliasBiliPaiViolet",
-    "icon_bilipai_green" to "MainActivityAliasBiliPaiGreen",
-    "icon_bilipai_ink" to "MainActivityAliasBiliPaiInk",
     "icon_bilipai_monet" to "MainActivityAliasBiliPaiMonet"
 )
 
@@ -60,9 +54,6 @@ private val NO_ICON_LAUNCHER_ALIAS_SUFFIX_BY_KEY = mapOf(
     "icon_bilipai" to "MainActivityAliasBiliPaiNoIcon",
     "icon_bilipai_pink" to "MainActivityAliasBiliPaiPinkNoIcon",
     "icon_bilipai_white" to "MainActivityAliasBiliPaiWhiteNoIcon",
-    "icon_bilipai_violet" to "MainActivityAliasBiliPaiVioletNoIcon",
-    "icon_bilipai_green" to "MainActivityAliasBiliPaiGreenNoIcon",
-    "icon_bilipai_ink" to "MainActivityAliasBiliPaiInkNoIcon",
     "icon_bilipai_monet" to "MainActivityAliasBiliPaiMonetNoIcon"
 )
 
@@ -89,6 +80,12 @@ private val FIXED_APPEARANCE_NO_ICON_ALIAS_SUFFIX_BY_KEY_AND_APPEARANCE = mapOf(
 )
 
 private val RETIRED_APP_ICON_ALIAS_SUFFIXES = setOf(
+    "MainActivityAliasBiliPaiViolet",
+    "MainActivityAliasBiliPaiVioletNoIcon",
+    "MainActivityAliasBiliPaiGreen",
+    "MainActivityAliasBiliPaiGreenNoIcon",
+    "MainActivityAliasBiliPaiInk",
+    "MainActivityAliasBiliPaiInkNoIcon",
     "MainActivityAliasAnime",
     "MainActivityAliasFlat",
     "MainActivityAliasTelegramBlue",
@@ -108,6 +105,7 @@ fun normalizeAppIconKey(rawKey: String?): String {
     if (key.isEmpty()) return DEFAULT_APP_ICON_KEY
 
     return when (key) {
+        "icon_bilipai_violet", "icon_bilipai_green", "icon_bilipai_ink" -> "icon_bilipai"
         "default", "Blue Snow Maid", "蓝雪女仆" -> "icon_blue_snow_maid"
         "Blue Snow Maid Announcement", "蓝雪女仆·喇叭", "蓝雪女仆喇叭" -> "icon_blue_snow_maid_announcement"
         "Blue Snow Maid Front", "蓝雪女仆·正面", "蓝雪女仆正面" -> "icon_blue_snow_maid_front"

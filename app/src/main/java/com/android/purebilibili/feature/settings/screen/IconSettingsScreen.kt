@@ -86,9 +86,6 @@ fun getIconGroups(): List<IconGroup> {
                 IconOption(R.string.icon_bilipai, "icon_bilipai", R.string.icon_bilipai_description, R.mipmap.ic_launcher_bilipai_round),
                 IconOption(R.string.icon_bilipai_pink, "icon_bilipai_pink", R.string.icon_bilipai_pink_description, R.mipmap.ic_launcher_bilipai_pink_round),
                 IconOption(R.string.icon_bilipai_white, "icon_bilipai_white", R.string.icon_bilipai_white_description, R.mipmap.ic_launcher_bilipai_white_round),
-                IconOption(R.string.icon_bilipai_violet, "icon_bilipai_violet", R.string.icon_bilipai_violet_description, R.mipmap.ic_launcher_bilipai_violet_round),
-                IconOption(R.string.icon_bilipai_green, "icon_bilipai_green", R.string.icon_bilipai_green_description, R.mipmap.ic_launcher_bilipai_green_round),
-                IconOption(R.string.icon_bilipai_ink, "icon_bilipai_ink", R.string.icon_bilipai_ink_description, R.mipmap.ic_launcher_bilipai_ink_round),
                 IconOption(R.string.icon_bilipai_theme, "icon_bilipai_theme", R.string.icon_bilipai_theme_description, R.mipmap.ic_bilipai_theme_017),
                 IconOption(R.string.icon_bilipai_monet, "icon_bilipai_monet", R.string.icon_bilipai_monet_description, R.mipmap.ic_launcher_bilipai_monet_round)
             )

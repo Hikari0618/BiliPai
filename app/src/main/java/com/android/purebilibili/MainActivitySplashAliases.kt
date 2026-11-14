@@ -32,9 +32,6 @@ internal fun resolveSplashThemeResIdForActivityClassName(className: String?): In
         "com.android.purebilibili.MainActivitySplashBiliPai" -> R.style.Theme_PureBiliBili_Splash_BiliPai
         "com.android.purebilibili.MainActivitySplashBiliPaiPink" -> R.style.Theme_PureBiliBili_Splash_BiliPaiPink
         "com.android.purebilibili.MainActivitySplashBiliPaiWhite" -> R.style.Theme_PureBiliBili_Splash_BiliPaiWhite
-        "com.android.purebilibili.MainActivitySplashBiliPaiViolet" -> R.style.Theme_PureBiliBili_Splash_BiliPaiViolet
-        "com.android.purebilibili.MainActivitySplashBiliPaiGreen" -> R.style.Theme_PureBiliBili_Splash_BiliPaiGreen
-        "com.android.purebilibili.MainActivitySplashBiliPaiInk" -> R.style.Theme_PureBiliBili_Splash_BiliPaiInk
         "com.android.purebilibili.MainActivitySplashBiliPaiMonet" -> R.style.Theme_PureBiliBili_Splash_BiliPaiMonet
         "com.android.purebilibili.MainActivitySplashNoIcon" -> R.style.Theme_PureBiliBili_Splash_NoIcon
         else -> 0
@@ -93,9 +90,3 @@ class MainActivitySplashBiliPaiPink : MainActivityLauncherEntry()
 class MainActivitySplashBiliPaiWhite : MainActivityLauncherEntry()
 class MainActivitySplashBiliPaiMonet : MainActivityLauncherEntry()
 class MainActivitySplashNoIcon : MainActivityLauncherEntry()
-
-class MainActivitySplashBiliPaiViolet : MainActivityLauncherEntry()
-
-class MainActivitySplashBiliPaiGreen : MainActivityLauncherEntry()
-
-class MainActivitySplashBiliPaiInk : MainActivityLauncherEntry()

@@ -373,36 +373,6 @@
             android:supportsPictureInPicture="true" />
 
         <activity
-            android:name=".MainActivitySplashBiliPaiViolet"
-            android:exported="false"
-            android:enabled="true"
-            android:icon="@mipmap/ic_launcher_bilipai_violet"
-            android:roundIcon="@mipmap/ic_launcher_bilipai_violet_round"
-            android:theme="@style/Theme.PureBiliBili.Splash.BiliPaiViolet"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|mnc|colorMode|density|smallestScreenSize|uiMode"
-            android:supportsPictureInPicture="true" />
-
-        <activity
-            android:name=".MainActivitySplashBiliPaiGreen"
-            android:exported="false"
-            android:enabled="true"
-            android:icon="@mipmap/ic_launcher_bilipai_green"
-            android:roundIcon="@mipmap/ic_launcher_bilipai_green_round"
-            android:theme="@style/Theme.PureBiliBili.Splash.BiliPaiGreen"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|mnc|colorMode|density|smallestScreenSize|uiMode"
-            android:supportsPictureInPicture="true" />
-
-        <activity
-            android:name=".MainActivitySplashBiliPaiInk"
-            android:exported="false"
-            android:enabled="true"
-            android:icon="@mipmap/ic_launcher_bilipai_ink"
-            android:roundIcon="@mipmap/ic_launcher_bilipai_ink_round"
-            android:theme="@style/Theme.PureBiliBili.Splash.BiliPaiInk"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|mnc|colorMode|density|smallestScreenSize|uiMode"
-            android:supportsPictureInPicture="true" />
-
-        <activity
             android:name=".MainActivitySplashBiliPaiMonet"
             android:exported="false"
             android:enabled="true"
@@ -726,14 +696,15 @@
             </intent-filter>
         </activity-alias>
 
+        <!-- 已退役的图标入口沿用普通 BiliPai 图标，启动后由图标同步切换至当前入口。 -->
         <activity-alias
             android:name=".MainActivityAliasBiliPaiViolet"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_bilipai_violet"
-            android:roundIcon="@mipmap/ic_launcher_bilipai_violet_round"
+            android:icon="@mipmap/ic_launcher_bilipai"
+            android:roundIcon="@mipmap/ic_launcher_bilipai_round"
             android:label="@string/app_name"
-            android:targetActivity=".MainActivitySplashBiliPaiViolet">
+            android:targetActivity=".MainActivitySplashBiliPai">
             <intent-filter android:priority="1">
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -744,10 +715,10 @@
             android:name=".MainActivityAliasBiliPaiGreen"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_bilipai_green"
-            android:roundIcon="@mipmap/ic_launcher_bilipai_green_round"
+            android:icon="@mipmap/ic_launcher_bilipai"
+            android:roundIcon="@mipmap/ic_launcher_bilipai_round"
             android:label="@string/app_name"
-            android:targetActivity=".MainActivitySplashBiliPaiGreen">
+            android:targetActivity=".MainActivitySplashBiliPai">
             <intent-filter android:priority="1">
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -758,10 +729,10 @@
             android:name=".MainActivityAliasBiliPaiInk"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_bilipai_ink"
-            android:roundIcon="@mipmap/ic_launcher_bilipai_ink_round"
+            android:icon="@mipmap/ic_launcher_bilipai"
+            android:roundIcon="@mipmap/ic_launcher_bilipai_round"
             android:label="@string/app_name"
-            android:targetActivity=".MainActivitySplashBiliPaiInk">
+            android:targetActivity=".MainActivitySplashBiliPai">
             <intent-filter android:priority="1">
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -1063,8 +1034,8 @@
             android:name=".MainActivityAliasBiliPaiVioletNoIcon"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_bilipai_violet"
-            android:roundIcon="@mipmap/ic_launcher_bilipai_violet_round"
+            android:icon="@mipmap/ic_launcher_bilipai"
+            android:roundIcon="@mipmap/ic_launcher_bilipai_round"
             android:label="@string/app_name"
             android:targetActivity=".MainActivitySplashNoIcon">
             <intent-filter android:priority="1">
@@ -1077,8 +1048,8 @@
             android:name=".MainActivityAliasBiliPaiGreenNoIcon"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_bilipai_green"
-            android:roundIcon="@mipmap/ic_launcher_bilipai_green_round"
+            android:icon="@mipmap/ic_launcher_bilipai"
+            android:roundIcon="@mipmap/ic_launcher_bilipai_round"
             android:label="@string/app_name"
             android:targetActivity=".MainActivitySplashNoIcon">
             <intent-filter android:priority="1">
@@ -1091,8 +1062,8 @@
             android:name=".MainActivityAliasBiliPaiInkNoIcon"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_bilipai_ink"
-            android:roundIcon="@mipmap/ic_launcher_bilipai_ink_round"
+            android:icon="@mipmap/ic_launcher_bilipai"
+            android:roundIcon="@mipmap/ic_launcher_bilipai_round"
             android:label="@string/app_name"
             android:targetActivity=".MainActivitySplashNoIcon">
             <intent-filter android:priority="1">
