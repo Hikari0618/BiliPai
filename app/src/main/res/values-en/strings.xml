@@ -992,12 +992,6 @@
     <string name="animation_indicator_dynamic_length_summary">Fit the selected indicator to its label; turn off to fill the slot. Applies only to liquid glass.</string>
 
 
-    <string name="icon_bilipai_violet">BiliPai Violet</string>
-    <string name="icon_bilipai_violet_description">Violet mark on a pale lavender background</string>
-    <string name="icon_bilipai_green">BiliPai Green</string>
-    <string name="icon_bilipai_green_description">Green mark on a pale mint background</string>
-    <string name="icon_bilipai_ink">BiliPai Ink</string>
-    <string name="icon_bilipai_ink_description">Warm white mark on an ink background</string>
     <string name="icon_bilipai_theme">BiliPai Theme</string>
     <string name="icon_bilipai_theme_description">Follow the app accent or choose an independent icon color. Uses the nearest preset, so slight color differences may occur.</string>
 

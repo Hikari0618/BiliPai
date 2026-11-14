@@ -994,12 +994,6 @@
     <string name="animation_indicator_dynamic_length_summary">选中指示器随文字长度变化；关闭后覆盖完整槽位，仅作用于液态玻璃</string>
 
 
-    <string name="icon_bilipai_violet">BiliPai 紫</string>
-    <string name="icon_bilipai_violet_description">淡紫背景与紫色标志</string>
-    <string name="icon_bilipai_green">BiliPai 绿</string>
-    <string name="icon_bilipai_green_description">浅绿背景与绿色标志</string>
-    <string name="icon_bilipai_ink">BiliPai 墨</string>
-    <string name="icon_bilipai_ink_description">墨色背景与暖白标志</string>
     <string name="icon_bilipai_theme">BiliPai 主题色</string>
     <string name="icon_bilipai_theme_description">支持跟随应用主题色或独立调色。自动匹配最接近的预置配色，可能存在轻微色差。</string>
 
