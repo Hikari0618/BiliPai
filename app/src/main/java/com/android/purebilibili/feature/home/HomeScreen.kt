@@ -804,12 +804,6 @@ fun HomeScreen(
         )
     }
     val isLiquidGlassEnabled = homePerformanceConfig.isAnyLiquidGlassEnabled
-    val overlayPillColors = rememberHomeGlassPillColors(
-        glassEnabled = isLiquidGlassEnabled,
-        blurEnabled = isHeaderBlurEnabled || isBottomBarBlurEnabled,
-        emphasized = true,
-        baseColor = AppSurfaceTokens.cardContainer()
-    )
     val appThemeConfig = com.android.purebilibili.core.ui.LocalAppThemeConfig.current
     val chromeCategoryStateFlow = remember(viewModel, currentCategory, popularSubCategory) {
         if (currentCategory == HomeCategory.POPULAR) {
@@ -2297,7 +2291,6 @@ fun HomeScreen(
                                              }
                                              viewModel.refresh(category)
                                          },
-                                         overlayPillColors = overlayPillColors,
                                          todayWatchEnabled = todayWatch.enabled,
                                          todayWatchMode = todayWatch.mode,
                                          todayWatchPlan = todayWatch.plan,
@@ -2572,7 +2565,6 @@ fun HomeScreen(
                     oldContentStartIndex = recommendOldContentStartIndex,
                     refreshTipVisible = homeSettings.homeRefreshTipVisible,
                 ),
-                overlayPillColors = overlayPillColors,
             )
         }
 

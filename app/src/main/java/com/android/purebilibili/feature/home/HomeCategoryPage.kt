@@ -249,7 +249,6 @@ internal fun HomeCategoryPageContent(
     oldContentStartIndex: Int? = null,
     oldContentLocatorRefreshKey: Long = 0L,
     onOldContentDividerClick: () -> Unit = {},
-    overlayPillColors: com.android.purebilibili.feature.home.HomeGlassResolvedColors,
     todayWatchEnabled: Boolean = false,
     todayWatchMode: TodayWatchMode = TodayWatchMode.RELAX,
     todayWatchPlan: TodayWatchPlan? = null,
@@ -982,7 +981,6 @@ internal fun HomeCategoryPageContent(
                 keepInvisibleAfterDissolve = true,
             ) {
                 com.android.purebilibili.feature.home.components.HomeOverlayPillButton(
-                    overlayPillColors = overlayPillColors,
                     onClick = {
                         if (!oldContentLocatorDissolving) {
                             oldContentLocatorDismissed = true

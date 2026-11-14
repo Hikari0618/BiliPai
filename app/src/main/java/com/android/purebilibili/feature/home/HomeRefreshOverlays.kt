@@ -105,7 +105,6 @@ internal fun HomeRefreshUndoHost(
     refreshNewItemsKey: Long,
     homeListBottomPadding: Dp,
     oldContentLocatorVisible: Boolean,
-    overlayPillColors: HomeGlassResolvedColors,
 ) {
     val undoAvailable by viewModel.undoAvailable.collectAsStateWithLifecycle()
     val nowPlayingBarOverlayVisible by com.android.purebilibili.feature.audio.player
@@ -118,7 +117,6 @@ internal fun HomeRefreshUndoHost(
         refreshNewItemsKey = refreshNewItemsKey,
         homeListBottomPadding = homeListBottomPadding,
         oldContentLocatorVisible = oldContentLocatorVisible,
-        overlayPillColors = overlayPillColors,
         onUndo = viewModel::undoRefresh,
     )
 }
@@ -131,7 +129,6 @@ private fun HomeRefreshUndoOverlay(
     refreshNewItemsKey: Long,
     homeListBottomPadding: Dp,
     oldContentLocatorVisible: Boolean,
-    overlayPillColors: HomeGlassResolvedColors,
     onUndo: () -> Unit,
 ) {
     val overlayMotionSpec = remember { resolveHomeOverlayMotionSpec() }
@@ -180,7 +177,6 @@ private fun HomeRefreshUndoOverlay(
                 keepInvisibleAfterDissolve = true,
             ) {
                 com.android.purebilibili.feature.home.components.HomeOverlayPillButton(
-                    overlayPillColors = overlayPillColors,
                     onClick = { if (!undoDissolving) onUndo() },
                     modifier = Modifier.pointerInput(Unit) {
                         detectHorizontalDragGestures { change, _ ->

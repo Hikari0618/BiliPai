@@ -25,7 +25,7 @@ class CommonListHistoryUpNavigationStructureTest {
     fun `history route connects up click to space screen`() {
         val source = loadSource("app/src/main/java/com/android/purebilibili/navigation/AppNavigation.kt")
 
-        assertTrue(source.contains("onUpClick = { mid -> pushNavigation3Route(ScreenRoutes.Space.createRoute(mid)) }"))
+        assertTrue(source.contains("onUpClick = { mid -> pushNavigation3Target(BiliPaiNavKey.Space(mid)) }"))
     }
 
     @Test
@@ -41,9 +41,9 @@ class CommonListHistoryUpNavigationStructureTest {
             .substringBefore("BiliPaiNavEntryContentRole.BANGUMI")
 
         assertTrue(favoriteBranch.contains("onUpClick = { mid ->"))
-        assertTrue(favoriteBranch.contains("ScreenRoutes.Space.createRoute(mid)"))
+        assertTrue(favoriteBranch.contains("BiliPaiNavKey.Space(mid)"))
         assertTrue(seasonBranch.contains("onUpClick = { mid ->"))
-        assertTrue(seasonBranch.contains("ScreenRoutes.Space.createRoute(mid)"))
+        assertTrue(seasonBranch.contains("BiliPaiNavKey.Space(mid)"))
         assertTrue(listSource.contains("onUpClick = if (!isHistoryBatchMode)"))
     }
 

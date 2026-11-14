@@ -64,15 +64,17 @@ class CompanionPaneStateTest {
     }
 
     @Test
-    fun draggingFromCollapsedEdgeFollowsFingerLive() {
+    fun draggingMovesDividerLiveWhilePanesStayAtCommittedWidth() {
         val state = CompanionPaneState(0.38f)
         state.selectFraction(0f, 1000f)
         assertEquals(CompanionPaneMode.Video, state.mode)
         state.beginDrag()
         state.dragBy(0.35f)
-        // 拖动中线条与把手实时跟随手指，视频面板同步收窄，不再停在已提交的边缘位置。
+        // 拖动中线条与把手实时跟随手指；面板测量宽度锁定在已提交值，
+        // 避免逐帧重测整栏（首页网格 + 播放器 Surface）造成拖动卡顿，松手后一次性重排。
         assertEquals(0.35f, state.layoutFeedFraction(1000f), 0.001f)
-        assertEquals(0.65f, state.measuredVideoFraction(1000f), 0.001f)
+        assertEquals(1f, state.measuredVideoFraction(1000f), 0.001f)
+        assertEquals(0.38f, state.measuredFeedFraction(1000f), 0.001f)
         state.cancelDrag()
         assertEquals(0f, state.layoutFeedFraction(1000f))
     }

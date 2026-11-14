@@ -241,18 +241,21 @@ internal fun resolveHomeGlassPillStyle(
     emphasized: Boolean
 ): HomeGlassPillStyle {
     return when {
-        !blurEnabled -> HomeGlassPillStyle(
-            containerAlpha = if (emphasized) 0.92f else 0.88f,
-            borderAlpha = 0.12f,
-            highlightAlpha = if (emphasized) 0.12f else 0.08f,
-            contentAlpha = 0.96f
-        )
-
+        // 液态玻璃开关优先于模糊开关：悬浮胶囊不接真实 backdrop 采样（见
+        // HomeOverlayPillButton 的 MIUI 爆栈约束），玻璃开启时无论模糊开关
+        // 如何都用玻璃半透明 + 白描边，避免「玻璃开 + 模糊关」时退化成实心。
         glassEnabled -> HomeGlassPillStyle(
             containerAlpha = if (emphasized) 0.28f else 0.24f,
             borderAlpha = 0.16f,
             highlightAlpha = if (emphasized) 0.20f else 0.16f,
             contentAlpha = 1f
+        )
+
+        !blurEnabled -> HomeGlassPillStyle(
+            containerAlpha = if (emphasized) 0.92f else 0.88f,
+            borderAlpha = 0.12f,
+            highlightAlpha = if (emphasized) 0.12f else 0.08f,
+            contentAlpha = 0.96f
         )
 
         else -> HomeGlassPillStyle(
@@ -548,29 +551,6 @@ internal fun rememberHomeGlassChromeColors(
         resolveHomeGlassChromeStyle(
             glassEnabled = glassEnabled,
             blurEnabled = blurEnabled
-        )
-    }
-    return remember(style, baseColor) {
-        HomeGlassResolvedColors(
-            containerColor = baseColor.copy(alpha = style.containerAlpha),
-            borderColor = Color.White.copy(alpha = style.borderAlpha),
-            highlightColor = Color.White.copy(alpha = style.highlightAlpha)
-        )
-    }
-}
-
-@Composable
-internal fun rememberHomeGlassPillColors(
-    glassEnabled: Boolean,
-    blurEnabled: Boolean,
-    emphasized: Boolean,
-    baseColor: Color
-): HomeGlassResolvedColors {
-    val style = remember(glassEnabled, blurEnabled, emphasized) {
-        resolveHomeGlassPillStyle(
-            glassEnabled = glassEnabled,
-            blurEnabled = blurEnabled,
-            emphasized = emphasized
         )
     }
     return remember(style, baseColor) {

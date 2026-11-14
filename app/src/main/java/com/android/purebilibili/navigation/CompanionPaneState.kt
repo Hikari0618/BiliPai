@@ -83,14 +83,18 @@ internal class CompanionPaneState(
         if (isDragging) dragFraction.coerceIn(0f, 1f)
         else committedFeedFraction(widthDp)
 
-    /** 隐藏面板继续以最近双栏宽度测量，避免零宽测量破坏内容状态。 */
+    /**
+     * 面板测量宽度：拖动中锁定在已提交值，只有分隔线/把手跟手，
+     * 松手后一次性提交重排；逐帧重测整栏（首页网格 + 播放器 Surface）会造成拖动卡顿。
+     * 隐藏面板继续以最近双栏宽度测量，避免零宽测量破坏内容状态。
+     */
     fun measuredFeedFraction(widthDp: Float): Float =
         if (mode == CompanionPaneMode.Video) constrainSplit(splitFraction, widthDp)
-        else layoutFeedFraction(widthDp)
+        else committedFeedFraction(widthDp)
 
     fun measuredVideoFraction(widthDp: Float): Float =
         if (mode == CompanionPaneMode.Feed) 1f - constrainSplit(splitFraction, widthDp)
-        else 1f - layoutFeedFraction(widthDp)
+        else 1f - committedFeedFraction(widthDp)
 
     private fun constrainSplit(fraction: Float, widthDp: Float): Float = fraction.coerceIn(
         (280f / widthDp).coerceAtMost(0.45f),
