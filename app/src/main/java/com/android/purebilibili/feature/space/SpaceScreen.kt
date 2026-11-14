@@ -149,6 +149,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -192,7 +193,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil3.compose.AsyncImage
+import com.android.purebilibili.core.ui.components.PageAwareAsyncImage as AsyncImage
 import coil3.imageLoader
 import coil3.request.ImageRequest
 import com.android.purebilibili.feature.profile.buildForProfileFusion
@@ -381,9 +382,18 @@ fun SpaceScreen(
     }
     val dynamicInteractionViewModel: DynamicViewModel = viewModel()
     val loadedUiState by viewModel.uiState.collectAsStateWithLifecycle()
-    // Defer only a container's initial expansion. The host keeps ready=true on return,
-    // so an already opened profile never falls back to a skeleton during a back gesture.
-    val uiState = if (contentTransitionReady) loadedUiState else SpaceUiState.Loading
+    // 网络请求立即开始，首屏列表挂载等待页面或容器进场结束；返回不重新显示骨架。
+    val initialContentReady = com.android.purebilibili.core.ui.animation.rememberNavigationContentReady(
+        entryKey = mid,
+        contentReady = contentTransitionReady,
+    )
+    val uiState = if (initialContentReady) loadedUiState else SpaceUiState.Loading
+    val spaceVisualWorkActive = com.android.purebilibili.core.ui.rememberVisualWorkActive()
+    LaunchedEffect(mid, initialContentReady, loadedUiState is SpaceUiState.Success, spaceVisualWorkActive) {
+        if (initialContentReady && loadedUiState is SpaceUiState.Success && spaceVisualWorkActive) {
+            viewModel.loadVisibleSpaceSupplemental()
+        }
+    }
     val contentRevealAlpha = com.android.purebilibili.core.ui.transition.rememberSharedCardDetailRevealAlpha(
         entryKey = mid,
         contentTransitionReady = contentTransitionReady,
@@ -910,7 +920,11 @@ fun SpaceScreen(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .then(spaceChromeSource?.modifier ?: Modifier)
-                                .then(if (hazeState != null) Modifier.hazeSourceCompat(state = hazeState) else Modifier)
+                                .then(
+                                    if (hazeState != null &&
+                                        com.android.purebilibili.core.ui.blur.LocalChromeBackdropRecordingAllowed.current
+                                    ) Modifier.hazeSourceCompat(state = hazeState) else Modifier
+                                )
                                 .globalWallpaperAwareBackground(MaterialTheme.colorScheme.surface),
                         ) {
                         SpaceContent(
@@ -940,6 +954,7 @@ fun SpaceScreen(
                             contributionVideoLayoutMode = contributionVideoLayoutMode,
                             onLoadMoreVideos = viewModel::loadMoreVideos,
                             onLoadHome = viewModel::loadSpaceHome,
+                            onCollectionPreview = viewModel::loadCollectionPreview,
                             onLoadDynamic = { viewModel.loadSpaceDynamic(refresh = true) },
                             onLoadMoreDynamic = { viewModel.loadSpaceDynamic(refresh = false) },
                             onLoadBangumi = { viewModel.loadSpaceBangumi(refresh = true) },
@@ -1388,6 +1403,7 @@ private fun SpaceContent(
     contributionVideoLayoutMode: SpaceContributionVideoLayoutMode,
     onLoadMoreVideos: () -> Unit,
     onLoadHome: () -> Unit,
+    onCollectionPreview: (SpaceCollectionPreviewKey) -> Unit,
     onLoadDynamic: () -> Unit,
     onLoadMoreDynamic: () -> Unit,
     onLoadBangumi: () -> Unit,
@@ -1463,6 +1479,23 @@ private fun SpaceContent(
         widthSizeClass = windowSizeClass.widthSizeClass,
     ).outerPaddingDp).dp
     val selectedMainTab = state.tabShellState.selectedTab
+    val collectionPreviewKeys = remember(state.seasons, state.series) {
+        buildMap<Any, SpaceCollectionPreviewKey> {
+            state.seasons.forEach {
+                put("season_${it.meta.season_id}", SpaceCollectionPreviewKey(SpaceCollectionKind.SEASON, it.meta.season_id))
+            }
+            state.series.forEach {
+                put("series_${it.meta.series_id}", SpaceCollectionPreviewKey(SpaceCollectionKind.SERIES, it.meta.series_id))
+            }
+        }
+    }
+    ObserveSpaceCollectionPreviews(
+        gridState = gridState,
+        targets = collectionPreviewKeys,
+        active = !isInitialLoading && selectedMainTab == SpaceMainTab.COLLECTIONS &&
+            com.android.purebilibili.core.ui.rememberVisualWorkActive(),
+        onVisible = onCollectionPreview,
+    )
     // 各标签页各自持有头部，但轮播页码属于同一个用户空间。
     var sharedBannerPage by remember(state.userInfo.mid) { mutableStateOf(0) }
     val contentDensity = LocalDensity.current
@@ -1492,25 +1525,29 @@ private fun SpaceContent(
     val selectedPage = displayedMainTabs.indexOfFirst {
         it.tab == resolveSpacePrimaryTab(selectedMainTab)
     }.coerceAtLeast(0)
-    val pagerState = rememberContentTabPager(
-        pageCount = displayedMainTabs.size,
-        selectedPage = selectedPage,
-        onPageSelected = { page ->
-            displayedMainTabs.getOrNull(page)?.tab?.let { tab ->
-                if (tab != resolveSpacePrimaryTab(selectedMainTab)) onMainTabSelected(tab)
-            }
-        },
-        prepareNeighbors = { sourcePage ->
-            val source = pageGridStates.getValue(displayedMainTabs[sourcePage].tab)
-            // 资料头或标签仍在视口时，覆盖目标页的旧正文位置并保留标签局部偏移。
-            // 两页均进入正文后才保留各自的内容历史，避免切到投稿时主标签突然消失。
-            displayedMainTabs.forEachIndexed { index, tab ->
-                if (index != sourcePage) {
-                    alignSpacePageHeader(source, pageGridStates.getValue(tab.tab))
+    // 骨架的主页只是占位；资料就绪后按默认/恢复标签初始化分页，避免把初始化播放成切页动画。
+    // 只替换分页状态，各标签的列表位置仍由外层 pageGridStates 保留。
+    val pagerState = key(isInitialLoading) {
+        rememberContentTabPager(
+            pageCount = displayedMainTabs.size,
+            selectedPage = selectedPage,
+            onPageSelected = { page ->
+                displayedMainTabs.getOrNull(page)?.tab?.let { tab ->
+                    if (tab != resolveSpacePrimaryTab(selectedMainTab)) onMainTabSelected(tab)
                 }
-            }
-        },
-    )
+            },
+            prepareNeighbors = { sourcePage ->
+                val source = pageGridStates.getValue(displayedMainTabs[sourcePage].tab)
+                // 资料头或标签仍在视口时，覆盖目标页的旧正文位置并保留标签局部偏移。
+                // 两页均进入正文后才保留各自的内容历史，避免切到投稿时主标签突然消失。
+                displayedMainTabs.forEachIndexed { index, tab ->
+                    if (index != sourcePage) {
+                        alignSpacePageHeader(source, pageGridStates.getValue(tab.tab))
+                    }
+                }
+            },
+        )
+    }
     val selectedContributionTab = remember(
         state.contributionTabs,
         state.selectedContributionTabId,
@@ -2018,7 +2055,7 @@ private fun SpaceContent(
                 )
                 return@LazyVerticalStaggeredGrid
             }
-            item(span = StaggeredGridItemSpan.FullLine) {
+            item(contentType = "space_profile_header", span = StaggeredGridItemSpan.FullLine) {
                 Box(
                     Modifier
                         .stationaryPagerHeader(pagerState, page)
@@ -2058,7 +2095,7 @@ private fun SpaceContent(
                 }
             }
 
-            item(key = "space_tabs", span = StaggeredGridItemSpan.FullLine) {
+            item(key = "space_tabs", contentType = "space_tabs", span = StaggeredGridItemSpan.FullLine) {
                 if (pinContentTabs) {
                     // 保留列表中的尺寸，吸顶后隐藏原位内容与语义，避免重复入口。
                     Box(
@@ -2128,7 +2165,7 @@ private fun SpaceContent(
                 }
 
                 if (state.homeVideos.isNotEmpty() || state.homeVideoCount > 0) {
-                    item(span = StaggeredGridItemSpan.FullLine) {
+                    item(contentType = "space_section_header", span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionHeader(
                             title = "视频",
                             count = state.homeVideoCount.takeIf { it > 0 } ?: state.homeVideos.size,
@@ -2162,13 +2199,13 @@ private fun SpaceContent(
                         )
                     }
                     if (!alignHomeVideos) {
-                        itemsIndexed(homeVideos, key = { index, _ -> homeVideoKeys[index] }) { index, _ ->
+                        itemsIndexed(homeVideos, key = { index, _ -> homeVideoKeys[index] }, contentType = { _, _ -> "space_video_card" }) { index, _ ->
                             renderHomeVideo(index, Modifier)
                         }
                     } else {
                         com.android.purebilibili.feature.home.resolveHomeFeedAlignedRows(homeVideos.size, gridColumns)
                             .forEach { row ->
-                                item(key = "space_home_video_row_${homeVideoKeys[row.first]}", span = StaggeredGridItemSpan.FullLine) {
+                                item(key = "space_home_video_row_${homeVideoKeys[row.first]}", contentType = "space_video_row", span = StaggeredGridItemSpan.FullLine) {
                                     com.android.purebilibili.feature.home.HomeAlignedVideoRow(
                                         indices = row,
                                         itemKeys = homeVideoKeys,
@@ -2183,7 +2220,7 @@ private fun SpaceContent(
                 }
 
                 if (state.homeFavoriteFolders.isNotEmpty() || state.homeFavoriteFolderCount > 0) {
-                    item(span = StaggeredGridItemSpan.FullLine) {
+                    item(contentType = "space_section_header", span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionHeader(
                             title = "收藏",
                             count = state.homeFavoriteFolderCount.takeIf { it > 0 }
@@ -2194,6 +2231,7 @@ private fun SpaceContent(
                     items(
                         items = state.homeFavoriteFolders.take(1),
                         key = { "home_favorite_${it.id}" },
+                        contentType = { "space_favorite_folder" },
                         span = { StaggeredGridItemSpan.FullLine }
                     ) { folder ->
                         SpaceFavoriteFolderRow(
@@ -2213,7 +2251,7 @@ private fun SpaceContent(
                 }
 
                 if (state.homeCoinVideos.isNotEmpty()) {
-                    item(span = StaggeredGridItemSpan.FullLine) {
+                    item(contentType = "space_section_header", span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionHeader(
                             title = "最近投币的视频",
                             count = state.homeCoinVideoCount.takeIf { it > 0 } ?: state.homeCoinVideos.size,
@@ -2252,13 +2290,13 @@ private fun SpaceContent(
                         )
                     }
                     if (!alignAggregate) {
-                        itemsIndexed(aggregateItems, key = { index, _ -> aggregateKeys[index] }) { index, _ ->
+                        itemsIndexed(aggregateItems, key = { index, _ -> aggregateKeys[index] }, contentType = { _, _ -> "space_aggregate_card" }) { index, _ ->
                             renderAggregate(index, Modifier)
                         }
                     } else {
                         com.android.purebilibili.feature.home.resolveHomeFeedAlignedRows(aggregateItems.size, gridColumns)
                             .forEach { row ->
-                                item(key = "space_coin_row_${aggregateKeys[row.first]}", span = StaggeredGridItemSpan.FullLine) {
+                                item(key = "space_coin_row_${aggregateKeys[row.first]}", contentType = "space_aggregate_row", span = StaggeredGridItemSpan.FullLine) {
                                     com.android.purebilibili.feature.home.HomeAlignedVideoRow(
                                         indices = row,
                                         itemKeys = aggregateKeys,
@@ -2273,7 +2311,7 @@ private fun SpaceContent(
                 }
 
                 if (state.homeLikeVideos.isNotEmpty()) {
-                    item(span = StaggeredGridItemSpan.FullLine) {
+                    item(contentType = "space_section_header", span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionHeader(
                             title = "最近点赞的视频",
                             count = state.homeLikeVideoCount.takeIf { it > 0 } ?: state.homeLikeVideos.size,
@@ -2316,13 +2354,13 @@ private fun SpaceContent(
                         )
                     }
                     if (!alignAggregate) {
-                        itemsIndexed(aggregateItems, key = { index, _ -> aggregateKeys[index] }) { index, _ ->
+                        itemsIndexed(aggregateItems, key = { index, _ -> aggregateKeys[index] }, contentType = { _, _ -> "space_aggregate_card" }) { index, _ ->
                             renderAggregate(index, Modifier)
                         }
                     } else {
                         com.android.purebilibili.feature.home.resolveHomeFeedAlignedRows(aggregateItems.size, gridColumns)
                             .forEach { row ->
-                                item(key = "space_like_row_${aggregateKeys[row.first]}", span = StaggeredGridItemSpan.FullLine) {
+                                item(key = "space_like_row_${aggregateKeys[row.first]}", contentType = "space_aggregate_row", span = StaggeredGridItemSpan.FullLine) {
                                     com.android.purebilibili.feature.home.HomeAlignedVideoRow(
                                         indices = row,
                                         itemKeys = aggregateKeys,
@@ -2337,7 +2375,7 @@ private fun SpaceContent(
                 }
 
                 if (state.articles.isNotEmpty() || state.totalArticles > 0) {
-                    item(span = StaggeredGridItemSpan.FullLine) {
+                    item(contentType = "space_section_header", span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionHeader(
                             title = "图文",
                             count = state.totalArticles.takeIf { it > 0 } ?: state.articles.size,
@@ -2352,6 +2390,7 @@ private fun SpaceContent(
                     items(
                         items = state.articles.take(1),
                         key = { "home_article_${it.id}" },
+                        contentType = { "space_article" },
                         span = { StaggeredGridItemSpan.FullLine }
                     ) { article ->
                         SpaceArticleListItem(
@@ -2369,7 +2408,7 @@ private fun SpaceContent(
                 }
 
                 if (state.audios.isNotEmpty() || state.totalAudios > 0) {
-                    item(span = StaggeredGridItemSpan.FullLine) {
+                    item(contentType = "space_section_header", span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionHeader(
                             title = "音频",
                             count = state.totalAudios.takeIf { it > 0 } ?: state.audios.size,
@@ -2384,6 +2423,7 @@ private fun SpaceContent(
                     items(
                         items = state.audios.take(1),
                         key = { "home_audio_${it.id}" },
+                        contentType = { "space_audio" },
                         span = { StaggeredGridItemSpan.FullLine }
                     ) { audio ->
                         SpaceAudioListItem(
@@ -2395,7 +2435,7 @@ private fun SpaceContent(
                 }
 
                 if (state.homeBangumiItems.isNotEmpty()) {
-                    item(span = StaggeredGridItemSpan.FullLine) {
+                    item(contentType = "space_section_header", span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionHeader(
                             title = "追番",
                             count = state.homeBangumiCount.takeIf { it > 0 } ?: state.homeBangumiItems.size,
@@ -2404,7 +2444,8 @@ private fun SpaceContent(
                     }
                     items(
                         items = state.homeBangumiItems.take(3),
-                        key = { "home_bangumi_${it.aid}_${it.param}" }
+                        key = { "home_bangumi_${it.aid}_${it.param}" },
+                        contentType = { "space_aggregate_poster" },
                     ) { item ->
                         SpaceAggregatePosterCard(
                             item = item,
@@ -2422,7 +2463,7 @@ private fun SpaceContent(
                 }
 
                 if (state.homeComicItems.isNotEmpty()) {
-                    item(span = StaggeredGridItemSpan.FullLine) {
+                    item(contentType = "space_section_header", span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionHeader(
                             title = "漫画",
                             count = state.homeComicCount.takeIf { it > 0 } ?: state.homeComicItems.size,
@@ -2434,7 +2475,8 @@ private fun SpaceContent(
                     }
                     items(
                         items = state.homeComicItems.take(1),
-                        key = { "home_comic_${it.aid}_${it.param}" }
+                        key = { "home_comic_${it.aid}_${it.param}" },
+                        contentType = { "space_aggregate_card" },
                     ) { item ->
                         SpaceAggregateMediaCard(
                             item = item,
@@ -2521,6 +2563,7 @@ private fun SpaceContent(
                     items(
                         items = dynamicCardItems,
                         key = { "space_dynamic_${it.id_str}" },
+                        contentType = { "space_dynamic" },
                         span = { StaggeredGridItemSpan.SingleLane }
                     ) { dynamic ->
                         DynamicCardV2(
@@ -2675,6 +2718,7 @@ private fun SpaceContent(
                             itemsIndexed(
                                 state.videos,
                                 key = { index, _ -> contributionVideoKeys[index] },
+                                contentType = { _, _ -> contributionVideoLayoutMode },
                                 span = { _, _ -> if (contributionVideoLayoutMode == SpaceContributionVideoLayoutMode.GRID) StaggeredGridItemSpan.SingleLane else StaggeredGridItemSpan.FullLine },
                             ) { index, _ ->
                                 renderContributionVideo(index, videoListItemModifier(enabled = homeSettings.cardAnimationEnabled))
@@ -2682,7 +2726,7 @@ private fun SpaceContent(
                         } else {
                             com.android.purebilibili.feature.home.resolveHomeFeedAlignedRows(state.videos.size, gridColumns)
                                 .forEach { row ->
-                                    item(key = "space_contribution_row_${contributionVideoKeys[row.first]}", span = StaggeredGridItemSpan.FullLine) {
+                                    item(key = "space_contribution_row_${contributionVideoKeys[row.first]}", contentType = "space_video_row", span = StaggeredGridItemSpan.FullLine) {
                                         com.android.purebilibili.feature.home.HomeAlignedVideoRow(
                                             indices = row,
                                             itemKeys = contributionVideoKeys,
@@ -2715,6 +2759,7 @@ private fun SpaceContent(
                         items(
                             items = state.audios,
                             key = { "space_audio_${it.id}" },
+                            contentType = { "space_audio" },
                             span = { StaggeredGridItemSpan.FullLine }
                         ) { audio ->
                             SpaceAudioListItem(
@@ -2756,7 +2801,7 @@ private fun SpaceContent(
                             }
                         }
                         if (isOpus) {
-                            items(state.opusCollections, key = { "opus_collection_${it.id}" }, span = { StaggeredGridItemSpan.FullLine }) { collection ->
+                            items(state.opusCollections, key = { "opus_collection_${it.id}" }, contentType = { "space_collection_summary" }, span = { StaggeredGridItemSpan.FullLine }) { collection ->
                                 SpaceCollectionSummaryCard(title = collection.title, subtitle = collection.subtitle,
                                     cover = collection.cover, total = null,
                                     onClick = { onArticleCollectionClick(collection.id, collection.title) })
@@ -2778,6 +2823,7 @@ private fun SpaceContent(
                         items(
                             items = articles,
                             key = { "space_article_${it.id}" },
+                            contentType = { "space_article" },
                             span = { StaggeredGridItemSpan.FullLine }
                         ) { article ->
                             SpaceArticleListItem(
@@ -2855,12 +2901,13 @@ private fun SpaceContent(
                             itemsIndexed(
                                 archives,
                                 key = { index, _ -> archiveKeys[index] },
+                                contentType = { _, _ -> contributionVideoLayoutMode },
                                 span = { _, _ -> if (contributionVideoLayoutMode == SpaceContributionVideoLayoutMode.GRID) StaggeredGridItemSpan.SingleLane else StaggeredGridItemSpan.FullLine },
                             ) { index, _ -> renderArchive(index, Modifier) }
                         } else {
                             com.android.purebilibili.feature.home.resolveHomeFeedAlignedRows(archives.size, gridColumns)
                                 .forEach { row ->
-                                    item(key = "space_season_row_${archiveKeys[row.first]}", span = StaggeredGridItemSpan.FullLine) {
+                                    item(key = "space_season_row_${archiveKeys[row.first]}", contentType = "space_video_row", span = StaggeredGridItemSpan.FullLine) {
                                         com.android.purebilibili.feature.home.HomeAlignedVideoRow(
                                             indices = row,
                                             itemKeys = archiveKeys,
@@ -2924,12 +2971,13 @@ private fun SpaceContent(
                             itemsIndexed(
                                 archives,
                                 key = { index, _ -> archiveKeys[index] },
+                                contentType = { _, _ -> contributionVideoLayoutMode },
                                 span = { _, _ -> if (contributionVideoLayoutMode == SpaceContributionVideoLayoutMode.GRID) StaggeredGridItemSpan.SingleLane else StaggeredGridItemSpan.FullLine },
                             ) { index, _ -> renderArchive(index, Modifier) }
                         } else {
                             com.android.purebilibili.feature.home.resolveHomeFeedAlignedRows(archives.size, gridColumns)
                                 .forEach { row ->
-                                    item(key = "space_series_row_${archiveKeys[row.first]}", span = StaggeredGridItemSpan.FullLine) {
+                                    item(key = "space_series_row_${archiveKeys[row.first]}", contentType = "space_video_row", span = StaggeredGridItemSpan.FullLine) {
                                         com.android.purebilibili.feature.home.HomeAlignedVideoRow(
                                             indices = row,
                                             itemKeys = archiveKeys,
@@ -2949,11 +2997,11 @@ private fun SpaceContent(
                                 SpaceSectionEmptyState("暂无合集或系列", "这个 UP 主还没有公开的合集或系列")
                             }
                         }
-                        items(state.seasons, key = { "contribution_season_${it.meta.season_id}" }, span = { StaggeredGridItemSpan.FullLine }) { season ->
+                        items(state.seasons, key = { "contribution_season_${it.meta.season_id}" }, contentType = { "space_collection_summary" }, span = { StaggeredGridItemSpan.FullLine }) { season ->
                             SpaceCollectionSummaryCard(season.meta.name, season.meta.description, season.meta.cover, season.meta.total,
                                 onClick = { onViewAllClick("season", season.meta.season_id, state.userInfo.mid, season.meta.name, state.userInfo.name) })
                         }
-                        items(state.series, key = { "contribution_series_${it.meta.series_id}" }, span = { StaggeredGridItemSpan.FullLine }) { series ->
+                        items(state.series, key = { "contribution_series_${it.meta.series_id}" }, contentType = { "space_collection_summary" }, span = { StaggeredGridItemSpan.FullLine }) { series ->
                             SpaceCollectionSummaryCard(series.meta.name, series.meta.description, series.meta.cover, series.meta.total,
                                 onClick = { onViewAllClick("series", series.meta.series_id, state.userInfo.mid, series.meta.name, state.userInfo.name) })
                         }
@@ -2968,7 +3016,7 @@ private fun SpaceContent(
                         } else if (state.comics.isEmpty()) {
                             item(span = StaggeredGridItemSpan.FullLine) { SpaceSectionEmptyState("暂无漫画", "这个 UP 主还没有公开的漫画") }
                         }
-                        items(state.comics, key = { "comic_${it.param}" }) { comic ->
+                        items(state.comics, key = { "comic_${it.param}" }, contentType = { "space_aggregate_poster" }) { comic ->
                             SpaceAggregatePosterCard(comic, onClick = { onWebClick("https://manga.bilibili.com/detail/mc${comic.param}", comic.title) })
                         }
                     }
@@ -2986,7 +3034,7 @@ private fun SpaceContent(
                 }
 
                 if (state.createdFavoriteFolders.isNotEmpty()) {
-                    item(span = StaggeredGridItemSpan.FullLine) {
+                    item(contentType = "space_section_header", span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionHeader(
                             title = "创建的收藏夹",
                             count = state.createdFavoriteFolders.size,
@@ -2996,6 +3044,7 @@ private fun SpaceContent(
                     items(
                         items = state.createdFavoriteFolders,
                         key = { "created_favorite_${it.id}" },
+                        contentType = { "space_favorite_folder" },
                         span = { StaggeredGridItemSpan.FullLine }
                     ) { folder ->
                         SpaceFavoriteFolderRow(
@@ -3015,7 +3064,7 @@ private fun SpaceContent(
                 }
 
                 if (state.collectedFavoriteFolders.isNotEmpty()) {
-                    item(span = StaggeredGridItemSpan.FullLine) {
+                    item(contentType = "space_section_header", span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionHeader(
                             title = "收藏的合集",
                             count = state.collectedFavoriteFolders.size,
@@ -3025,6 +3074,7 @@ private fun SpaceContent(
                     items(
                         items = state.collectedFavoriteFolders,
                         key = { "collected_favorite_${it.id}" },
+                        contentType = { "space_favorite_folder" },
                         span = { StaggeredGridItemSpan.FullLine }
                     ) { folder ->
                         SpaceFavoriteFolderRow(
@@ -3053,7 +3103,7 @@ private fun SpaceContent(
                         )
                     }
                 }
-                items(state.bangumiItems, key = { "follow_bangumi_${it.seasonId}" }) { item ->
+                items(state.bangumiItems, key = { "follow_bangumi_${it.seasonId}" }, contentType = { "space_bangumi" }) { item ->
                     SpaceBangumiCard(
                         item = item,
                         onClick = { onBangumiClick(item.seasonId) }
@@ -3072,7 +3122,14 @@ private fun SpaceContent(
             }
 
             SpaceMainTab.COLLECTIONS -> {
+                val collectionsState = state.tabShellState.tabStates[SpaceMainTab.COLLECTIONS]
+                if (collectionsState?.isLoading == true) {
+                    item(contentType = "space_loading", span = StaggeredGridItemSpan.FullLine) {
+                        SpaceLoadingFooter()
+                    }
+                }
                 if (
+                    collectionsState?.isLoading != true &&
                     state.seasons.isEmpty() &&
                     state.series.isEmpty() &&
                     state.createdFavoriteFolders.isEmpty() &&
@@ -3080,14 +3137,14 @@ private fun SpaceContent(
                 ) {
                     item(span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionEmptyState(
-                            title = "暂无合集",
-                            subtitle = "该用户还没有公开的系列、合集或收藏夹"
+                            title = if (collectionsState?.error != null) "加载合集失败" else "暂无合集",
+                            subtitle = collectionsState?.error ?: "该用户还没有公开的系列、合集或收藏夹"
                         )
                     }
                 }
 
                 if (state.seasons.isNotEmpty()) {
-                    item(span = StaggeredGridItemSpan.FullLine) {
+                    item(contentType = "space_section_header", span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionHeader(
                             title = "合集",
                             count = state.seasons.size,
@@ -3097,6 +3154,7 @@ private fun SpaceContent(
                     items(
                         items = state.seasons,
                         key = { "season_${it.meta.season_id}" },
+                        contentType = { "space_collection_preview" },
                         span = { StaggeredGridItemSpan.FullLine }
                     ) { season ->
                         SpaceCollectionWithPreviewCard(
@@ -3122,7 +3180,7 @@ private fun SpaceContent(
                 }
 
                 if (state.series.isNotEmpty()) {
-                    item(span = StaggeredGridItemSpan.FullLine) {
+                    item(contentType = "space_section_header", span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionHeader(
                             title = "系列",
                             count = state.series.size,
@@ -3132,6 +3190,7 @@ private fun SpaceContent(
                     items(
                         items = state.series,
                         key = { "series_${it.meta.series_id}" },
+                        contentType = { "space_collection_preview" },
                         span = { StaggeredGridItemSpan.FullLine }
                     ) { series ->
                         SpaceCollectionWithPreviewCard(
@@ -3157,7 +3216,7 @@ private fun SpaceContent(
                 }
 
                 if (state.createdFavoriteFolders.isNotEmpty()) {
-                    item(span = StaggeredGridItemSpan.FullLine) {
+                    item(contentType = "space_section_header", span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionHeader(
                             title = "创建的收藏夹",
                             count = state.createdFavoriteFolders.size,
@@ -3167,6 +3226,7 @@ private fun SpaceContent(
                     items(
                         items = state.createdFavoriteFolders,
                         key = { "collection_created_favorite_${it.id}" },
+                        contentType = { "space_favorite_folder" },
                         span = { StaggeredGridItemSpan.FullLine }
                     ) { folder ->
                         SpaceFavoriteFolderRow(
@@ -3186,7 +3246,7 @@ private fun SpaceContent(
                 }
 
                 if (state.collectedFavoriteFolders.isNotEmpty()) {
-                    item(span = StaggeredGridItemSpan.FullLine) {
+                    item(contentType = "space_section_header", span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionHeader(
                             title = "收藏的合集",
                             count = state.collectedFavoriteFolders.size,
@@ -3196,6 +3256,7 @@ private fun SpaceContent(
                     items(
                         items = state.collectedFavoriteFolders,
                         key = { "collection_collected_favorite_${it.id}" },
+                        contentType = { "space_favorite_folder" },
                         span = { StaggeredGridItemSpan.FullLine }
                     ) { folder ->
                         SpaceFavoriteFolderRow(

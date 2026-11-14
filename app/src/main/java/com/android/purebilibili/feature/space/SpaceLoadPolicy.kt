@@ -142,14 +142,9 @@ internal fun applySpaceSupplementalData(
         )
     )
 
-    val hasCollectionsLoaded = seasons.isNotEmpty() ||
-        series.isNotEmpty() ||
-        createdFavoriteFolders.isNotEmpty() ||
-        collectedFavoriteFolders.isNotEmpty()
-
     return nextState.copy(
         tabShellState = nextState.tabShellState.withUpdatedTab(SpaceMainTab.COLLECTIONS) {
-            it.copy(hasLoaded = hasCollectionsLoaded)
+            it.copy(hasLoaded = true, isLoading = false, error = null)
         }
     )
 }
@@ -158,16 +153,15 @@ private fun <T> mergeArchiveMapsByLargestList(
     existing: Map<Long, List<T>>,
     incoming: Map<Long, List<T>>
 ): Map<Long, List<T>> {
-    return (existing.keys + incoming.keys).mapNotNull { id ->
+    return (existing.keys + incoming.keys).associateWith { id ->
         val existingItems = existing[id].orEmpty()
         val incomingItems = incoming[id].orEmpty()
-        val selectedItems = if (incomingItems.size >= existingItems.size) {
+        if (incomingItems.size >= existingItems.size) {
             incomingItems
         } else {
             existingItems
         }
-        if (selectedItems.isNotEmpty()) id to selectedItems else null
-    }.toMap()
+    }
 }
 
 internal fun resolveEmbeddedSeasonArchives(

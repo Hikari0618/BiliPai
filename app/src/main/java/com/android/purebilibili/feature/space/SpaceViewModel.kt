@@ -19,6 +19,7 @@ import com.android.purebilibili.data.repository.HistoryRepository
 import com.android.purebilibili.data.repository.shouldContinueDynamicFetchAfterFilter
 import com.android.purebilibili.feature.bangumi.MY_FOLLOW_TYPE_BANGUMI
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -28,6 +29,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.job
 
 enum class SpaceSubTab {
     VIDEO,
@@ -237,7 +239,8 @@ class SpaceViewModel(
     // 「等空间信息加载完 → 再拉 HOME」两段串行压成一段并行。结果由 loadSpaceHome() 消费。
     private var homePrefetchMid: Long = 0L
     private var homePrefetchDeferred: Deferred<SpaceHomePayload>? = null
-    private val collectionPreviewLimit = 3
+    private var supplementalRequested = false
+    private val collectionArchiveJobs = mutableMapOf<SpaceCollectionPreviewKey, Job>()
     private var currentKeyword: String = ""
     
     init {
@@ -305,6 +308,9 @@ class SpaceViewModel(
         val requestGeneration = activeSpaceLoadGeneration
         activeSpaceLoadJob?.cancel()
         activeSpaceSupplementalJob?.cancel()
+        supplementalRequested = false
+        collectionArchiveJobs.values.toList().forEach { it.cancel() }
+        collectionArchiveJobs.clear()
         activeSpaceArticleJob?.cancel()
         activeSpaceOpusJob?.cancel()
         activeSpaceAudioJob?.cancel()
@@ -355,9 +361,8 @@ class SpaceViewModel(
                         seed = aggregateSeed,
                         selectedMainTab = initialMainTab,
                         selectedSubTab = aggregateSeed.defaultSubTab
-                    )
+                    ).markTabLoading(SpaceMainTab.COLLECTIONS)
                     loadSpaceWatchHistory(mid = mid, requestGeneration = requestGeneration)
-                    loadSpaceSupplemental(mid = mid, requestGeneration = requestGeneration)
                     loadSpaceHeaderMetrics(mid = mid, requestGeneration = requestGeneration)
                     loadSpaceFollowStatus(mid = mid, requestGeneration = requestGeneration)
                     val keys = keysDeferred.await()
@@ -496,8 +501,10 @@ class SpaceViewModel(
                 selectedTab = tabIndexToMainTab(_selectedMainTab.value)
             ).withUpdatedTab(SpaceMainTab.CONTRIBUTION) { it.copy(hasLoaded = true) }
         )
+        _uiState.update { state ->
+            if (state is SpaceUiState.Success) state.markTabLoading(SpaceMainTab.COLLECTIONS) else state
+        }
         loadSpaceWatchHistory(mid = mid, requestGeneration = requestGeneration)
-        loadSpaceSupplemental(mid = mid, requestGeneration = requestGeneration)
         ensureSelectedContributionContentLoaded()
         true
     }
@@ -723,6 +730,12 @@ class SpaceViewModel(
         }
     }
 
+    fun loadVisibleSpaceSupplemental() {
+        if (_uiState.value !is SpaceUiState.Success || supplementalRequested) return
+        supplementalRequested = true
+        loadSpaceSupplemental(currentMid, activeSpaceLoadGeneration)
+    }
+
     private fun loadSpaceSupplemental(mid: Long, requestGeneration: Long) {
         activeSpaceSupplementalJob?.cancel()
         activeSpaceSupplementalJob = viewModelScope.launch {
@@ -742,24 +755,6 @@ class SpaceViewModel(
 
                 com.android.purebilibili.core.util.Logger.d("SpaceVM", " Seasons: ${seasons.size}, Series: ${series.size}")
 
-                val seasonArchiveDeferreds = seasons
-                    .take(collectionPreviewLimit)
-                    .filter { it.meta.season_id !in embeddedSeasonArchives }
-                    .associate { season ->
-                        season.meta.season_id to async { fetchSeasonArchives(mid, season.meta.season_id).orEmpty() }
-                    }
-                val seriesArchiveDeferreds = series
-                    .take(collectionPreviewLimit)
-                    .filter { it.meta.series_id !in embeddedSeriesArchives }
-                    .associate { seriesItem ->
-                        seriesItem.meta.series_id to async { fetchSeriesArchives(mid, seriesItem.meta.series_id).orEmpty() }
-                    }
-
-                val seasonArchives = embeddedSeasonArchives + seasonArchiveDeferreds.mapValues { (_, deferred) -> deferred.await() }
-                    .filterValues { it.isNotEmpty() }
-                val seriesArchives = embeddedSeriesArchives + seriesArchiveDeferreds.mapValues { (_, deferred) -> deferred.await() }
-                    .filterValues { it.isNotEmpty() }
-
                 if (!shouldApplySpaceLoadResult(mid, currentMid, requestGeneration, activeSpaceLoadGeneration)) {
                     return@launch
                 }
@@ -771,9 +766,12 @@ class SpaceViewModel(
                     series = series,
                     createdFavoriteFolders = createdFavoriteFolders,
                     collectedFavoriteFolders = collectedFavoriteFolders,
-                    seasonArchives = seasonArchives,
-                    seriesArchives = seriesArchives
+                    seasonArchives = embeddedSeasonArchives,
+                    seriesArchives = embeddedSeriesArchives
                 )
+                // 目录先发布，不等待仅用于补全 IP 的请求；后到的结果只合并自身字段。
+                _uiState.value = updatedSupplementalState
+                ensureSelectedContributionContentLoaded()
                 val currentInfo = updatedSupplementalState.userInfo
                 if (currentInfo.spaceTags.none { it.type == "location" || it.title.contains("IP") } && currentInfo.ipLocation.isNullOrBlank()) {
                     val dynamicResp = runCatching { spaceApi.getSpaceDynamic(hostMid = mid) }.getOrNull()
@@ -782,26 +780,28 @@ class SpaceViewModel(
                     }
                     if (!dynamicIp.isNullOrBlank() && shouldApplySpaceLoadResult(mid, currentMid, requestGeneration, activeSpaceLoadGeneration)) {
                         val locationTitle = if (dynamicIp.startsWith("IP属地")) dynamicIp else "IP属地：$dynamicIp"
-                        val updatedTags = currentInfo.spaceTags + SpaceTagItem(type = "location", title = locationTitle)
-                        val updatedUserInfo = currentInfo.copy(
-                            ipLocation = dynamicIp,
-                            spaceTags = updatedTags
-                        )
-                        _uiState.value = updatedSupplementalState.copy(
-                            userInfo = updatedUserInfo,
-                            headerState = updatedSupplementalState.headerState.copy(userInfo = updatedUserInfo)
-                        )
-                    } else {
-                        _uiState.value = updatedSupplementalState
+                        _uiState.update { latest ->
+                            if (latest !is SpaceUiState.Success) return@update latest
+                            val user = latest.userInfo.copy(
+                                ipLocation = dynamicIp,
+                                spaceTags = latest.userInfo.spaceTags + SpaceTagItem(type = "location", title = locationTitle),
+                            )
+                            latest.copy(userInfo = user, headerState = latest.headerState.copy(userInfo = user))
+                        }
                     }
-                } else {
-                    _uiState.value = updatedSupplementalState
                 }
                 applySpaceSupporters(mid, requestGeneration, supportersDeferred.await())
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 android.util.Log.e("SpaceVM", "loadSpaceSupplemental error: ${e.message}", e)
+                if (shouldApplySpaceLoadResult(mid, currentMid, requestGeneration, activeSpaceLoadGeneration)) {
+                    _uiState.update { state ->
+                        if (state is SpaceUiState.Success) state.markTabResult(
+                            SpaceMainTab.COLLECTIONS, error = e.message ?: "加载合集失败",
+                        ) else state
+                    }
+                }
             }
         }
     }
@@ -1328,6 +1328,8 @@ class SpaceViewModel(
                 android.util.Log.e("SpaceVM", "fetchSeasonArchives failed: ${response.message}")
                 null
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             android.util.Log.e("SpaceVM", "fetchSeasonArchives error: ${e.message}", e)
             null
@@ -1344,6 +1346,8 @@ class SpaceViewModel(
                 android.util.Log.e("SpaceVM", "fetchSeriesArchives failed: ${response.message}")
                 null
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             android.util.Log.e("SpaceVM", "fetchSeriesArchives error: ${e.message}", e)
             null
@@ -2041,27 +2045,51 @@ class SpaceViewModel(
     }
 
     private fun loadSelectedSeasonArchives(seasonId: Long) {
-        viewModelScope.launch {
-            val requestMid = currentMid
-            val archives = fetchSeasonArchives(requestMid, seasonId).orEmpty()
-            if (archives.isEmpty() || requestMid != currentMid) return@launch
-            val latest = _uiState.value as? SpaceUiState.Success ?: return@launch
-            _uiState.value = latest.copy(
-                seasonArchives = latest.seasonArchives + (seasonId to archives)
-            )
-        }
+        loadCollectionArchives(SpaceCollectionPreviewKey(SpaceCollectionKind.SEASON, seasonId))
     }
 
     private fun loadSelectedSeriesArchives(seriesId: Long) {
-        viewModelScope.launch {
-            val requestMid = currentMid
-            val archives = fetchSeriesArchives(requestMid, seriesId).orEmpty()
-            if (archives.isEmpty() || requestMid != currentMid) return@launch
-            val latest = _uiState.value as? SpaceUiState.Success ?: return@launch
-            _uiState.value = latest.copy(
-                seriesArchives = latest.seriesArchives + (seriesId to archives)
-            )
+        loadCollectionArchives(SpaceCollectionPreviewKey(SpaceCollectionKind.SERIES, seriesId))
+    }
+
+    internal fun loadCollectionPreview(key: SpaceCollectionPreviewKey) {
+        val state = _uiState.value as? SpaceUiState.Success ?: return
+        val loaded = when (key.kind) {
+            SpaceCollectionKind.SEASON -> state.seasonArchives.containsKey(key.id)
+            SpaceCollectionKind.SERIES -> state.seriesArchives.containsKey(key.id)
         }
+        if (!loaded) loadCollectionArchives(key)
+    }
+
+    private fun loadCollectionArchives(key: SpaceCollectionPreviewKey) {
+        if (collectionArchiveJobs[key]?.isActive == true) return
+        val requestMid = currentMid
+        val generation = activeSpaceLoadGeneration
+        // 先登记再启动，缓存即时返回时也能可靠地移除本次请求。
+        val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
+            try {
+                when (key.kind) {
+                    SpaceCollectionKind.SEASON -> {
+                        val archives = fetchSeasonArchives(requestMid, key.id) ?: return@launch
+                        if (!shouldApplySpaceLoadResult(requestMid, currentMid, generation, activeSpaceLoadGeneration)) return@launch
+                        _uiState.update { state ->
+                            if (state is SpaceUiState.Success) applySpaceSeasonArchives(state, key.id, archives) else state
+                        }
+                    }
+                    SpaceCollectionKind.SERIES -> {
+                        val archives = fetchSeriesArchives(requestMid, key.id) ?: return@launch
+                        if (!shouldApplySpaceLoadResult(requestMid, currentMid, generation, activeSpaceLoadGeneration)) return@launch
+                        _uiState.update { state ->
+                            if (state is SpaceUiState.Success) applySpaceSeriesArchives(state, key.id, archives) else state
+                        }
+                    }
+                }
+            } finally {
+                collectionArchiveJobs.remove(key, coroutineContext.job)
+            }
+        }
+        collectionArchiveJobs[key] = job
+        job.start()
     }
 
     fun setSearchMode(enabled: Boolean) {
