@@ -91,11 +91,11 @@ internal fun LastPositionPill(
         ) {
             HomeOverlayPillButton(
                 overlayPillColors = overlayPillColors,
-                // 消散过程中内容已隐藏但仍有占位，用 enabled 挡住误触。
-                enabled = !dissolving,
                 onClick = {
-                    onClick()
-                    onDismiss()
+                    if (!dissolving) {
+                        onClick()
+                        onDismiss()
+                    }
                 },
                 modifier = Modifier.heightIn(min = AppChromeSizeTokens.MinimumTouchTarget),
             ) {
