@@ -42,6 +42,7 @@ internal class ThanosEffectView private constructor(
     private var onFirstFrame: (() -> Unit)?,
     private var onComplete: (() -> Unit)?,
     private var onFinalTail: (() -> Unit)?,
+    private val sweepReversed: Boolean,
 ) : TextureView(context), TextureView.SurfaceTextureListener {
     private var session: RenderSession? = null
     private var disposed = false
@@ -64,7 +65,7 @@ internal class ThanosEffectView private constructor(
     override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
         if (disposed) return
         session = RenderSession(
-            context, bitmap, bounds, surface, width, height, particleBudget(context),
+            context, bitmap, bounds, surface, width, height, particleBudget(context), sweepReversed,
             scheduleFrame = { if (firstFrameDelivered) scheduleNextFrame() },
             complete = { if (!disposed) onComplete?.invoke() },
             finalTail = { if (!disposed) onFinalTail?.invoke() },
@@ -118,13 +119,14 @@ internal class ThanosEffectView private constructor(
             onFirstFrame: () -> Unit,
             onComplete: () -> Unit,
             onFinalTail: (() -> Unit)? = null,
+            sweepReversed: Boolean = false,
         ): ThanosEffectView? {
             val root = window.decorView as? ViewGroup ?: return null
             if (!root.isAttachedToWindow || !isThanosEffectSupported(root.context)) return null
             val location = IntArray(2)
             root.getLocationInWindow(location)
             val bounds = RectF(windowBounds).apply { offset(-location[0].toFloat(), -location[1].toFloat()) }
-            val view = ThanosEffectView(root.context, bitmap, bounds, onFirstFrame, onComplete, onFinalTail)
+            val view = ThanosEffectView(root.context, bitmap, bounds, onFirstFrame, onComplete, onFinalTail, sweepReversed)
             return try {
                 root.addView(view, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
                 view
@@ -146,6 +148,7 @@ private class RenderSession(
     private val initialWidth: Int,
     private val initialHeight: Int,
     private val budget: Int,
+    private val sweepReversed: Boolean,
     private val scheduleFrame: () -> Unit,
     private val complete: () -> Unit,
     private val finalTail: () -> Unit,
@@ -170,7 +173,9 @@ private class RenderSession(
             if (closed.get()) return@post
             runSafely {
                 initializeEgl()
-                renderer = ParticleRenderer(context.resources, bitmap, bounds, context.resources.displayMetrics.density, budget)
+                renderer = ParticleRenderer(
+                    context.resources, bitmap, bounds, context.resources.displayMetrics.density, budget, sweepReversed,
+                )
                 renderer?.initialize(initialWidth, initialHeight)
                 // Reset frame has zero delta. Subsequent draws wait for UI's first-frame handoff.
                 render(System.nanoTime())

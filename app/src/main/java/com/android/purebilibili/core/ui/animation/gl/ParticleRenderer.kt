@@ -16,6 +16,8 @@ internal class ParticleRenderer(
     private val bounds: RectF,
     private val density: Float,
     private val maxParticles: Int,
+    /** true 时粒子自右向左消失，默认沿用上游的左→右扫描。 */
+    private val sweepReversed: Boolean = false,
 ) {
     private var program = 0
     private val buffers = IntArray(2)
@@ -63,6 +65,7 @@ internal class ParticleRenderer(
         listOf(
             "matrix", "rectSize", "reset", "time", "deltaTime", "particlesCount",
             "size", "gridSize", "tex", "seed", "dp", "longevity", "offset", "scale", "uvOffset",
+            "sweepReversed",
         ).forEach { uniforms[it] = GLES30.glGetUniformLocation(program, it) }
 
         grid = resolveThanosParticleGrid(bitmap.width, bitmap.height, density, maxParticles)
@@ -117,6 +120,7 @@ internal class ParticleRenderer(
         GLES30.glUniform2f(uniform("offset"), 0f, 0f)
         GLES30.glUniform1f(uniform("scale"), 1f)
         GLES30.glUniform1f(uniform("uvOffset"), 0.6f)
+        GLES30.glUniform1f(uniform("sweepReversed"), if (sweepReversed) 1f else 0f)
         GLES30.glUniform2f(uniform("rectSize"), bitmap.width.toFloat(), bitmap.height.toFloat())
         GLES30.glUniform1f(uniform("seed"), seed)
         GLES30.glUniform1f(uniform("dp"), density)

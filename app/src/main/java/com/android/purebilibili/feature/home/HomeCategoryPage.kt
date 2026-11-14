@@ -33,11 +33,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import com.android.purebilibili.core.ui.components.AppCard
 import com.android.purebilibili.core.ui.components.AppCardDefaults
 import com.android.purebilibili.core.ui.AdaptiveLoadingIndicator
-import androidx.compose.material.icons.outlined.Close
 import com.android.purebilibili.core.ui.components.AppIcon
 import com.android.purebilibili.core.ui.components.AppTextButton
 import com.android.purebilibili.core.ui.components.AppText
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import com.android.purebilibili.core.ui.components.LocalPageImageLoadingAllowed
 import com.android.purebilibili.core.ui.components.PageAwareAsyncImage
 import com.android.purebilibili.core.ui.rememberVisualWorkActive
@@ -55,7 +55,6 @@ import androidx.compose.ui.unit.dp
 import com.android.purebilibili.core.store.HomeDurationStyle
 import com.android.purebilibili.core.store.HomeFeedCardStyle
 import com.android.purebilibili.core.store.HomeWallpaperEffectMode
-import com.android.purebilibili.core.ui.animation.DissolvableVideoCard
 import com.android.purebilibili.core.ui.animation.DissolveAnimationPreset
 import com.android.purebilibili.core.ui.animation.MaybeDissolvableVideoCard
 import com.android.purebilibili.core.ui.adaptive.MotionTier
@@ -84,6 +83,7 @@ import com.android.purebilibili.feature.home.components.cards.StoryVideoCard
 import com.android.purebilibili.feature.common.ListLoadError
 
 import androidx.compose.ui.Alignment
+import com.android.purebilibili.feature.home.components.LastPositionPill
 import kotlinx.coroutines.yield
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
@@ -422,11 +422,8 @@ internal fun HomeCategoryPageContent(
         }
     }
     val oldContentLocatorScope = rememberCoroutineScope()
-    var oldContentLocatorDismissed by remember(oldContentLocatorRefreshKey) {
-        mutableStateOf(false)
-    }
 
-    var oldContentLocatorDissolving by remember(oldContentLocatorRefreshKey) {
+    var oldContentLocatorDismissed by rememberSaveable(oldContentLocatorRefreshKey) {
         mutableStateOf(false)
     }
 
@@ -950,66 +947,26 @@ internal fun HomeCategoryPageContent(
         val nowPlayingBarOverlayVisible by com.android.purebilibili.feature.audio.player
             .AudioNowPlayingSession.barOverlayVisible
             .collectAsStateWithLifecycle()
-        AnimatedVisibility(
-            visible = ((category == HomeCategory.RECOMMEND &&
-                oldContentGridItemIndex != null) || oldContentLocatorDissolving) &&
-                !oldContentLocatorDismissed,
-            enter = fadeIn() + scaleIn(initialScale = 0.92f),
-            exit = if (oldContentLocatorDismissed) androidx.compose.animation.ExitTransition.None else
-                fadeOut() + scaleOut(targetScale = 0.92f),
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(
-                    end = AppSpacingTokens.Large,
-                    // 听视频小横条悬浮时上浮避让（与动态页 76dp 预留一致）；
-                    // 整体抬高 120dp，避免胶囊压在底部卡片上
-                    bottom = contentPadding.calculateBottomPadding() + AppSpacingTokens.Medium +
-                        120.dp +
-                        if (nowPlayingBarOverlayVisible) 76.dp else 0.dp,
-                ),
-        ) {
-            DissolvableVideoCard(
-                isDissolving = oldContentLocatorDissolving,
-                onDissolveComplete = {
-                    oldContentLocatorDismissed = true
-                    oldContentLocatorDissolving = false
-                },
-                cardId = "old-content-locator-$oldContentLocatorRefreshKey",
-                preset = DissolveAnimationPreset.TELEGRAM_FAST,
-                collapseAfterDissolve = false,
-                publishGlobalDissolveState = false,
-                keepInvisibleAfterDissolve = true,
-            ) {
-                com.android.purebilibili.feature.home.components.HomeOverlayPillButton(
-                    onClick = {
-                        if (!oldContentLocatorDissolving) {
-                            oldContentLocatorDismissed = true
-                            oldContentGridItemIndex?.let { targetIndex ->
-                                oldContentLocatorScope.launch {
-                                    gridState.animateScrollToItem(targetIndex)
-                                }
-                            }
-                        }
-                    },
-                    modifier = Modifier.heightIn(min = 48.dp),
-                ) {
-                    AppText("定位上次刷新")
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Box(
-                        modifier = Modifier
-                            .size(22.dp)
-                            .clip(androidx.compose.foundation.shape.CircleShape)
-                            .clickable(enabled = !oldContentLocatorDissolving) { oldContentLocatorDissolving = true },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        AppIcon(
-                            imageVector = Icons.Outlined.Close,
-                            contentDescription = "关闭",
-                            modifier = Modifier.size(14.dp)
-                        )
+        if (oldContentGridItemIndex != null && !oldContentLocatorDismissed) {
+            LastPositionPill(
+                refreshKey = oldContentLocatorRefreshKey,
+                onDismiss = { oldContentLocatorDismissed = true },
+                onClick = {
+                    oldContentLocatorScope.launch {
+                        gridState.animateScrollToItem(oldContentGridItemIndex)
                     }
-                }
-            }
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(
+                        end = AppSpacingTokens.Large,
+                        // 听视频小横条悬浮时上浮避让（与动态页 76dp 预留一致）；
+                        // 整体抬高 120dp，避免胶囊压在底部卡片上
+                        bottom = contentPadding.calculateBottomPadding() + AppSpacingTokens.Medium +
+                            120.dp +
+                            if (nowPlayingBarOverlayVisible) 76.dp else 0.dp,
+                    ),
+            )
         }
     }
 }
