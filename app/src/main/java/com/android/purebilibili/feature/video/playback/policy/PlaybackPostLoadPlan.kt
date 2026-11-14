@@ -2,12 +2,10 @@ package com.android.purebilibili.feature.video.playback.policy
 
 internal enum class PlaybackPostLoadTask {
     PLAYER_INFO,
-    VIDEO_SHOT,
     REFRESH_DEFERRED_SIGNALS,
     LOAD_FOLLOWING_MIDS,
     OWNER_STATS,
     VIDEO_TAGS,
-    AI_SUMMARY,
     ONLINE_COUNT,
     HEARTBEAT,
     PLUGIN_ON_VIDEO_LOAD,
@@ -25,10 +23,6 @@ internal fun buildPlaybackPostLoadPlan(
     val plan = mutableListOf(
         PlaybackPostLoadTaskSpec(
             task = PlaybackPostLoadTask.PLAYER_INFO,
-            delayMs = 150L
-        ),
-        PlaybackPostLoadTaskSpec(
-            task = PlaybackPostLoadTask.VIDEO_SHOT,
             delayMs = 150L
         ),
         PlaybackPostLoadTaskSpec(
@@ -53,10 +47,6 @@ internal fun buildPlaybackPostLoadPlan(
         PlaybackPostLoadTaskSpec(
             task = PlaybackPostLoadTask.START_PLUGIN_CHECK,
             delayMs = 1_200L
-        ),
-        PlaybackPostLoadTaskSpec(
-            task = PlaybackPostLoadTask.AI_SUMMARY,
-            delayMs = 1_500L
         )
     )
 

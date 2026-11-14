@@ -8,25 +8,21 @@ import kotlin.test.assertTrue
 class PlaybackPostLoadPlanPolicyTest {
 
     @Test
-    fun `guest plan should prioritize player info and videoshot before enrichment`() {
+    fun `guest plan prioritizes player info before enrichment`() {
         val plan = buildPlaybackPostLoadPlan(
             isLoggedIn = false
         )
 
         val playerInfoDelay = plan.firstDelayOf(PlaybackPostLoadTask.PLAYER_INFO)
-        val videoshotDelay = plan.firstDelayOf(PlaybackPostLoadTask.VIDEO_SHOT)
         val ownerStatsDelay = plan.firstDelayOf(PlaybackPostLoadTask.OWNER_STATS)
         val tagsDelay = plan.firstDelayOf(PlaybackPostLoadTask.VIDEO_TAGS)
-        val aiSummaryDelay = plan.firstDelayOf(PlaybackPostLoadTask.AI_SUMMARY)
         val heartbeatDelay = plan.firstDelayOf(PlaybackPostLoadTask.HEARTBEAT)
 
         assertEquals(150L, playerInfoDelay)
-        assertEquals(150L, videoshotDelay)
         assertTrue(ownerStatsDelay > playerInfoDelay)
         // 标签行会插在简介与操作栏之间，晚到会把下方内容整体下推，
         // 因此必须与首屏同批发出，不能排在 enrichment 之后。
         assertTrue(tagsDelay <= playerInfoDelay)
-        assertTrue(aiSummaryDelay > ownerStatsDelay)
         assertTrue(heartbeatDelay > playerInfoDelay)
     }
 

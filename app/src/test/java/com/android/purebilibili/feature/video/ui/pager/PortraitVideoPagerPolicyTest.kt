@@ -224,6 +224,17 @@ class PortraitVideoPagerPolicyTest {
     }
 
     @Test
+    fun commentAndAuthorSheetsHideUnderlyingControls() {
+        assertFalse(
+            resolvePortraitOverlayControlsVisible(
+                portraitOverlayVisible = true,
+                showDetailSheet = false,
+                otherSheetVisible = true,
+            )
+        )
+    }
+
+    @Test
     fun portraitOverlayTap_togglesFromCurrentVisibility() {
         assertFalse(resolvePortraitOverlayVisibilityAfterTap(currentlyVisible = true))
         assertTrue(resolvePortraitOverlayVisibilityAfterTap(currentlyVisible = false))

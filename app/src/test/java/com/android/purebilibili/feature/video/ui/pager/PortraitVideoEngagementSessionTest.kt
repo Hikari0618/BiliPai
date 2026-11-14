@@ -39,6 +39,20 @@ class PortraitVideoEngagementSessionTest {
         assertNull(resolvePortraitEngagementSubject(actual.copy(aid = 0L), info(actual).copy(aid = 0L)))
     }
 
+    @Test fun `story av identity accepts canonical BV metadata and keeps page event identity`() {
+        val actual = subject("BV_CURRENT", 120L)
+        for (pageId in listOf("av120", "120")) {
+            val requested = actual.copy(bvid = pageId, aid = 0L, ownerMid = 0L)
+            val resolved = resolvePortraitEngagementSubject(requested, info(actual))
+            assertNotNull(resolved)
+            assertEquals(pageId, resolved?.bvid)
+            assertEquals(120L, resolved?.aid)
+            assertEquals(actual.ownerMid, resolved?.ownerMid)
+            assertNull(resolvePortraitEngagementSubject(requested, info(actual).copy(aid = 130L)))
+        }
+        assertNotNull(resolvePortraitEngagementSubject(actual.copy(bvid = "av120"), info(actual)))
+    }
+
     @Test fun `foreign coin dialog waits for its real status and spends only that video`() = runTest(dispatcher) {
         val backend = Backend()
         val root = model(backend)

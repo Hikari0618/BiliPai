@@ -4,6 +4,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -30,6 +33,7 @@ internal data class ContinuousPlayerHostLayout(
     val scale: State<Float>,
     val isFullscreen: Boolean,
     val contentTopInset: Dp = 0.dp,
+    val viewportWidthProvider: (() -> Dp)? = null,
 )
 
 // 视口宽度 override 的量化步长：消费方策略全部断点式，量化后过渡期状态稳定。
@@ -86,12 +90,12 @@ internal data class ContinuousPlayerFullscreenExtras(
 /**
  * @param preferLayoutWidthInline 普通视频竖屏详情播放器：展开态按**实际布局宽度**算高度，
  * 避免 `configuration.screenWidthDp` 与真机可用宽度不一致时出现左右黑边（vivo 等窄机更常见）。
- * 折叠/半折叠时必须仍尊重 [inlineHeight]（评论上滑缩小播放器），不能盖成固定展开比例。
+ * 折叠/半折叠时必须仍尊重 [inlineHeightProvider]（评论上滑缩小播放器），不能盖成固定展开比例。
  * @param inlineTopInset 沉浸状态栏额外高度；只加在 inline 高度上，不参与媒体比例本体。
  */
 internal fun Modifier.continuousPlayerViewportHeight(
     progressProvider: () -> Float,
-    inlineHeight: Dp,
+    inlineHeightProvider: () -> Dp,
     fullscreenHeight: Dp,
     enabled: Boolean,
     preferLayoutWidthInline: Boolean = false,
@@ -102,7 +106,7 @@ internal fun Modifier.continuousPlayerViewportHeight(
         val layoutWidth = constraints.maxWidth.coerceAtLeast(1)
         val removedInset = removedInlineTopInsetProvider()
         val insetPx = (inlineTopInset - removedInset).roundToPx().coerceAtLeast(0)
-        val callerInlinePx = (inlineHeight - removedInset).roundToPx().coerceAtLeast(0)
+        val callerInlinePx = (inlineHeightProvider() - removedInset).roundToPx().coerceAtLeast(0)
         val inlinePx = resolveContinuousPlayerInlineHeightPx(
             layoutWidthPx = layoutWidth,
             preferLayoutWidthInline = preferLayoutWidthInline,
@@ -219,11 +223,22 @@ internal fun PortraitInlineVideoPlayerHost(
     residentCoverSource: VideoDetailResidentCoverSource? = null,
     suppressTransientOverlaysForTransition: Boolean = false,
     showPlaybackErrorNotice: Boolean = false,
+    viewportWidthProvider: (() -> Dp)? = null,
 ) {
     val successState = uiState as? VideoPlaybackUiState.Success
     // 竖屏全屏由 PortraitVideoPager 接管播放面；内联 section 不得再合成。
     if (isPortraitFullscreen) {
         return
+    }
+    // 宽度提示只影响控件断点。连续折叠在布局/绘制中读取，控件只订阅量化后的宽度。
+    val viewportWidthDpOverride by remember(animatedViewportWidth, viewportWidthProvider) {
+        derivedStateOf {
+            val width = viewportWidthProvider?.invoke() ?: animatedViewportWidth
+            if (width.isSpecified) {
+                ((width.value.roundToInt() / VIEWPORT_WIDTH_OVERRIDE_QUANTIZE_STEP_DP) *
+                    VIEWPORT_WIDTH_OVERRIDE_QUANTIZE_STEP_DP).coerceAtLeast(1)
+            } else null
+        }
     }
 
     Box(
@@ -286,17 +301,7 @@ internal fun PortraitInlineVideoPlayerHost(
                 sponsorMarkers = sponsorProgressMarkers,
                 isVerticalVideo = isVerticalVideo,
                 isPortraitFullscreen = isPortraitFullscreen,
-                viewportWidthDpOverride = if (animatedViewportWidth.isSpecified) {
-                    // 消费方（播放器 UI/控制栏布局策略）全部是断点式档位；
-                    // 连续动画宽度若逐帧直传，会让 VideoPlayerSectionState 每帧
-                    // 失去 equals，过渡期间整段 section 反复重组。量化成 16dp 桶，
-                    // 档位切换点之外完全稳定。
-                    ((animatedViewportWidth.value.roundToInt() /
-                        VIEWPORT_WIDTH_OVERRIDE_QUANTIZE_STEP_DP) *
-                        VIEWPORT_WIDTH_OVERRIDE_QUANTIZE_STEP_DP).coerceAtLeast(1)
-                } else {
-                    null
-                },
+                viewportWidthDpOverride = viewportWidthDpOverride,
                 currentCodec = codecPreference,
                 currentSecondCodec = secondCodecPreference,
                 currentAudioQuality = audioQualityPreference,

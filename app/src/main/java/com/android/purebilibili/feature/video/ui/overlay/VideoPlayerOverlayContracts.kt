@@ -293,4 +293,7 @@ data class VideoPlayerOverlayActions(
     val onFloatingPanelVisibilityChange: (Boolean) -> Unit = {},
     val onMoreMenuRequestConsumed: () -> Unit = {},
     val moreMenuSource: com.android.purebilibili.core.ui.components.AppGlassMenuSource? = null,
+    val onEnterCleanScreen: (() -> Unit)? = null,
+    val onOpenVideoDetails: (() -> Unit)? = null,
+    val onOpenAuthorPreview: (() -> Unit)? = null,
 )

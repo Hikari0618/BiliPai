@@ -61,6 +61,7 @@ internal fun PlayerControlProgressBar(
     modifier: Modifier = Modifier,
     seekAreaHeight: Dp? = null,
     verticalHeightScale: Float = 1f,
+    horizontalSeekOnly: Boolean = false,
 ) {
     val progress = progressProvider()
     VideoProgressBar(
@@ -85,6 +86,7 @@ internal fun PlayerControlProgressBar(
         modifier = modifier,
         seekAreaHeight = seekAreaHeight,
         verticalHeightScale = verticalHeightScale,
+        horizontalSeekOnly = horizontalSeekOnly,
     )
 }
 
@@ -118,13 +120,14 @@ internal fun ProgressTimeText(
     positionProvider: () -> Long,
     durationProvider: () -> Long,
     modifier: Modifier = Modifier,
+    singleLine: Boolean = false,
 ) {
     val seconds by remember(positionProvider) { derivedStateOf { positionProvider() / 1000L } }
     val durationSeconds by remember(durationProvider) { derivedStateOf { durationProvider() / 1000L } }
     val duration = FormatUtils.formatDuration(durationSeconds.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
     val style = TextStyle(
-        fontSize = 10.sp,
-        lineHeight = 12.sp,
+        fontSize = if (singleLine) 11.sp else 10.sp,
+        lineHeight = if (singleLine) 16.sp else 12.sp,
         fontWeight = FontWeight.Medium,
         fontFamily = FontFamily.Default,
         fontFeatureSettings = "tnum",
@@ -132,8 +135,21 @@ internal fun ProgressTimeText(
     )
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
-    val width = remember(duration, measurer, density) {
-        with(density) { measurer.measure(duration, style).size.width.toDp() }
+    val width = remember(duration, measurer, density, singleLine) {
+        val template = if (singleLine) "$duration / $duration" else duration
+        with(density) { measurer.measure(template, style).size.width.toDp() }
+    }
+    if (singleLine) {
+        AppText(
+            text = "${FormatUtils.formatDuration(seconds.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())} / $duration",
+            color = Color.White,
+            style = style,
+            modifier = modifier.width(width),
+            maxLines = 1,
+            softWrap = false,
+            tapToCopyEnabled = false,
+        )
+        return
     }
     Column(
         modifier = modifier.width(width),

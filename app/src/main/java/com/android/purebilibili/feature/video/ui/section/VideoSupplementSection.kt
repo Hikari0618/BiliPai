@@ -107,6 +107,9 @@ fun AiSummarySheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
+        com.android.purebilibili.feature.video.screen.VideoUiWorkConsumerEffect(
+            com.android.purebilibili.feature.video.playback.policy.VideoUiWorkKind.AI_SUMMARY,
+        )
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -120,9 +123,9 @@ fun AiSummarySheet(
                     onCreateNoteDraftClick = onCreateNoteDraft,
                     defaultExpanded = true,
                 )
-            } else if (promptState != null) {
+            } else {
                 AiSummaryPromptCard(
-                    promptState = promptState,
+                    promptState = promptState ?: com.android.purebilibili.feature.video.viewmodel.initialAiSummaryPromptState(),
                     onActionClick = onRetry,
                 )
             }

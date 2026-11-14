@@ -20,6 +20,7 @@ import com.android.purebilibili.core.store.TokenManager
 import com.android.purebilibili.data.model.response.ViewInfo
 import com.android.purebilibili.data.repository.ActionRepository
 import com.android.purebilibili.data.repository.VideoRepository
+import com.android.purebilibili.data.repository.resolveVideoInfoLookupInput
 import com.android.purebilibili.feature.video.ui.components.CoinDialog
 import com.android.purebilibili.feature.video.ui.components.TripleSuccessAnimation
 import com.android.purebilibili.feature.video.ui.components.PlayerNativeMenuTheme
@@ -49,12 +50,15 @@ internal fun interface PortraitEngagementLoader {
     suspend fun load(subject: VideoSubjectSnapshot, knownInfo: ViewInfo?, seed: VideoEngagementSeed, metadataKnown: Boolean): Result<PortraitEngagementSnapshot>
 }
 
-/** BVID 绑定当前视频；未知 AID 由详情补齐，已知 AID 冲突仍拒绝。 */
+/** 按详情请求的 BV / AV 身份校验；保留页面标识供会话和事件路由使用。 */
 internal fun resolvePortraitEngagementSubject(
     requested: VideoSubjectSnapshot,
     info: ViewInfo,
 ): VideoSubjectSnapshot? {
-    if (info.bvid != requested.bvid || info.aid <= 0L ||
+    val lookup = resolveVideoInfoLookupInput(requested.bvid, requested.aid) ?: return null
+    val matchesLookup = if (lookup.bvid.isNotEmpty()) info.bvid == lookup.bvid
+        else info.aid == lookup.aid
+    if (!matchesLookup || info.aid <= 0L ||
         (requested.aid > 0L && info.aid != requested.aid)
     ) return null
     return requested.copy(
@@ -90,7 +94,7 @@ private val DefaultPortraitEngagementLoader = PortraitEngagementLoader { request
                     isFollowing = false, followStatusKnown = true, isFavorited = false,
                     relationshipStatusKnown = true, coinCount = 0,
                 ), info))
-                else -> queryVideoEngagementRelationship(subject.aid, subject.bvid).map { flags ->
+                else -> queryVideoEngagementRelationship(subject.aid, info?.bvid ?: subject.bvid).map { flags ->
                     PortraitEngagementSnapshot(subject, metadataSeed.copy(
                         isLiked = if (seed.likeStatusKnown) seed.isLiked else flags.like, likeStatusKnown = true,
                         isFollowing = if (seed.followStatusKnown) seed.isFollowing else flags.attention, followStatusKnown = true,

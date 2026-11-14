@@ -125,6 +125,14 @@ class PortraitPagerSwitchPolicyTest {
         assertTrue(
             shouldBlockPortraitPagerScrollForCommentOverlay(
                 commentSheetVisible = false,
+                subReplyVisible = false,
+                commentVisibilityProgress = 0f,
+                detailSheetVisible = true,
+            )
+        )
+        assertTrue(
+            shouldBlockPortraitPagerScrollForCommentOverlay(
+                commentSheetVisible = false,
                 subReplyVisible = true,
                 commentVisibilityProgress = 0f
             )

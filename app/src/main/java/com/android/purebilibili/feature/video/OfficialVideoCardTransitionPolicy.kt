@@ -30,7 +30,8 @@ internal fun resolveOfficialReturnAnimType(
         !sourceAvailable -> listOf(
             "VIEW_ANIM_FOLLOW_SYSTEM", "VIEW_ANIM_FADE_OUT", "VIEW_ANIM_EXPLODE_OUT", "VIEW_ANIM_NONE",
         )
-        preferSystemPredictiveBack -> listOf("VIEW_ANIM_FOLLOW_SYSTEM", "VIEW_ANIM_DEFAULT")
+        // 预测返回仍优先使用有效卡片落点；FOLLOW_SYSTEM 会把回卡替换为普通窗口退场。
+        preferSystemPredictiveBack -> listOf("VIEW_ANIM_DEFAULT", "VIEW_ANIM_FOLLOW_SYSTEM")
         else -> listOf("VIEW_ANIM_DEFAULT")
     }
     return when (preferredTypes.firstOrNull { supportsOfficialBackType(metadata, it) }) {

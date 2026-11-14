@@ -148,9 +148,10 @@ internal fun shouldBlockPortraitPagerScrollForCommentOverlay(
     commentSheetVisible: Boolean,
     subReplyVisible: Boolean,
     commentVisibilityProgress: Float,
-    progressEpsilon: Float = 0.001f
+    progressEpsilon: Float = 0.001f,
+    detailSheetVisible: Boolean = false,
 ): Boolean {
-    return commentSheetVisible ||
+    return detailSheetVisible || commentSheetVisible ||
         subReplyVisible ||
         commentVisibilityProgress > progressEpsilon
 }

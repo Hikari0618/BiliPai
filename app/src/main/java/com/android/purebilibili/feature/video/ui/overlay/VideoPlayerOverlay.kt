@@ -756,6 +756,7 @@ private fun VideoPlayerOverlayContent(
         }
     }
     var showEpisodeMenu by remember { mutableStateOf(false) }
+    var showCollectionOnly by remember(bvid, cid) { mutableStateOf(false) }
     var showEpisodeSourceMenu by remember { mutableStateOf(false) }
     var bottomControlFloatingPanelVisible by remember { mutableStateOf(false) }
     var showCdnDiagnostics by remember { mutableStateOf(false) }
@@ -878,6 +879,8 @@ private fun VideoPlayerOverlayContent(
     val hideCenterPlayback = rememberHideCenterPlayback()
     val simplifiedPortraitChrome = if (isFullscreen) !viewportIsLandscape else
         configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
+    val portraitFullscreenChrome = isFullscreen && simplifiedPortraitChrome
+    val chromeTitle = if (pages.size > 1) pages.getOrNull(currentPageIndex)?.part?.ifBlank { title } ?: title else title
     // 折叠工具栏复用播放器更多菜单；打开后消费请求，关闭菜单或重建控件不重复弹出。
     val consumeMoreMenuRequest by rememberUpdatedState(actions.onMoreMenuRequestConsumed)
     val requestedMoreSource by rememberUpdatedState(actions.moreMenuSource)
@@ -888,8 +891,6 @@ private fun VideoPlayerOverlayContent(
             consumeMoreMenuRequest()
         }
     }
-    // 仅播放器玻璃开启时采用三键竖向 dock；菜单路由不依赖弹窗自身的材质开关。
-    val usePortraitGlassDock = simplifiedPortraitChrome && isFullscreen && LocalPlayerControlGlassEnabled.current
     var showInsightDetails by remember(player, bvid, cid) { mutableStateOf(false) }
     val visualWorkActive = com.android.purebilibili.core.ui.rememberVisualWorkActive()
     // 可见性属于当前布局节点；媒体身份变化不会重新触发仍在视口内的可见性回调。
@@ -1496,6 +1497,7 @@ private fun VideoPlayerOverlayContent(
         var subtitleChromeHeightPx by remember(subtitleChromeHeightSeed) {
             mutableIntStateOf(subtitleChromeHeightSeed)
         }
+        var topChromeHeightPx by remember { mutableIntStateOf(0) }
         PiliExternalSubtitleOverlay(
             subtitleTools, isFullscreen,
             controlsVisible = isVisible && !isScreenLocked && !danmakuComposerVisible,
@@ -1570,7 +1572,7 @@ private fun VideoPlayerOverlayContent(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(overlayVisualPolicy.bottomScrimHeightDp.dp)
+                    .height(if (portraitFullscreenChrome) 360.dp else overlayVisualPolicy.bottomScrimHeightDp.dp)
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
@@ -1639,13 +1641,13 @@ private fun VideoPlayerOverlayContent(
                 TopControlBar(
                     simplifiedPortrait = simplifiedPortraitChrome,
                     authorKey = bvid,
-                    authorName = videoOwnerName,
+                    authorName = if (portraitFullscreenChrome) "" else videoOwnerName,
                     authorFace = state.videoOwnerFace,
                     isFollowing = state.isFollowed,
                     followStatusKnown = state.followStatusKnown,
                     onFollowClick = actions.onToggleFollow,
                     isPortrait = if (isFullscreen) !viewportIsLandscape else simplifiedPortraitChrome,
-                    title = if (pages.size > 1) pages.getOrNull(currentPageIndex)?.part?.ifBlank { title } ?: title else title,
+                    title = if (portraitFullscreenChrome) "" else chromeTitle,
                     onlineCount = displayedOnlineCount,
                     isFullscreen = isFullscreen,
                     statusBarVisible = playerChromeStatusBarVisible,
@@ -1709,31 +1711,60 @@ private fun VideoPlayerOverlayContent(
                     },
                     showSponsorSegmentsButton = sponsorMarkers.isNotEmpty(),
                     onSponsorSegmentsClick = { showSponsorSegments = true },
-                    modifier = Modifier.align(Alignment.TopCenter),
+                    modifier = Modifier.align(Alignment.TopCenter)
+                        .onSizeChanged { topChromeHeightPx = it.height },
                 )
-                if (isFullscreen && simplifiedPortraitChrome && showFullscreenActionItems && bvid.isNotBlank()) {
-                    key(bvid, cid) {
-                        PortraitEngagementRail(
-                            isLiked = isLiked,
-                            likeStatusKnown = likeStatusKnown,
-                            isCoined = isCoined,
-                            isFavorited = isFavorited,
-                            likeCount = state.likeCount.takeIf { state.engagementCountsKnown },
-                            commentCount = state.commentCount.takeIf { state.engagementCountsKnown },
-                            favoriteCount = state.favoriteCount.takeIf { state.engagementCountsKnown },
-                            onLike = onToggleLike,
-                            onTriple = actions.onTripleAction,
-                            onCoin = onCoin,
-                            onComment = { onDismissEndDrawer(); onLandscapeCommentClick() },
-                            onFavorite = onToggleFavorite,
-                            onQuickFavorite = actions.onQuickFavorite,
-                            onShare = { onShare?.invoke() ?: openVideoShareSheet() },
-                            shareMenuSource = shareMenuSource,
-                            modifier = Modifier
-                                .align(Alignment.CenterEnd)
-                                .windowInsetsPadding(playerControlHorizontalInsets(true, true).only(WindowInsetsSides.End))
-                                .padding(end = 8.dp),
-                        )
+                // 横屏顶部快捷键开关不控制竖屏互动栏。
+                if (isFullscreen && simplifiedPortraitChrome && bvid.isNotBlank()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize().layout { measurable, constraints ->
+                            // 仅在测量阶段读取高度；互动栏底部贴近信息区，去掉额外 8dp 留白。
+                            // 玻璃与原生共用位置，仍按信息区实测高度避让标题、选集和播放控件。
+                            val gap = 8.dp.roundToPx()
+                            val top = (topChromeHeightPx + gap).coerceAtMost(constraints.maxHeight)
+                            val availableHeight = (constraints.maxHeight - top - subtitleChromeHeightPx).coerceAtLeast(0)
+                            val placeable = measurable.measure(constraints.copy(minHeight = availableHeight, maxHeight = availableHeight))
+                            layout(constraints.maxWidth, constraints.maxHeight) {
+                                placeable.placeRelative(0, top)
+                            }
+                        },
+                    ) {
+                        key(bvid, cid) {
+                            PortraitEngagementRail(
+                                isLiked = isLiked,
+                                likeStatusKnown = likeStatusKnown,
+                                isCoined = isCoined,
+                                isFavorited = isFavorited,
+                                likeCount = state.likeCount.takeIf { state.engagementCountsKnown },
+                                commentCount = state.commentCount.takeIf { state.engagementCountsKnown },
+                                favoriteCount = state.favoriteCount.takeIf { state.engagementCountsKnown },
+                                onLike = onToggleLike,
+                                onTriple = actions.onTripleAction,
+                                onCoin = onCoin,
+                                onComment = { onDismissEndDrawer(); onLandscapeCommentClick() },
+                                onFavorite = onToggleFavorite,
+                                onQuickFavorite = actions.onQuickFavorite,
+                                onShare = { onShare?.invoke() ?: openVideoShareSheet() },
+                                shareMenuSource = shareMenuSource,
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .windowInsetsPadding(playerControlHorizontalInsets(true, true).only(WindowInsetsSides.End))
+                                    .padding(end = 8.dp),
+                            )
+                        }
+                    }
+                }
+                val openEpisodeSelection: () -> Unit = {
+                    showCollectionOnly = false
+                    if (hasExternalPlaylist && pages.size > 1) {
+                        showEpisodeSourceMenu = true
+                    } else if (hasExternalPlaylist) {
+                        onExternalPlaylistClick()
+                    } else if (hasEpisodeEntry) {
+                        onDismissEndDrawer()
+                        if (landscapeCommentPanelVisible) onLandscapeCommentClick()
+                        showVideoSettings = false
+                        showEpisodeMenu = true
                     }
                 }
                 Column(
@@ -1743,9 +1774,39 @@ private fun VideoPlayerOverlayContent(
                             onBottomControlsSizeChanged(it.height)
                         },
                 ) {
+                    if (portraitFullscreenChrome) {
+                        PortraitPlayerMetadata(
+                            bvid = bvid,
+                            title = chromeTitle,
+                            authorName = videoOwnerName,
+                            authorFace = state.videoOwnerFace,
+                            isFollowing = state.isFollowed,
+                            followStatusKnown = state.followStatusKnown,
+                            onFollowClick = actions.onToggleFollow,
+                            episodeLabel = if (pages.size > 1) "分 P ${currentPageIndex + 1}/${pages.size}" else null,
+                            onEpisodeClick = openEpisodeSelection,
+                            collectionLabel = ugcSeason
+                                ?.takeIf { season -> season.sections.any { it.episodes.isNotEmpty() } }
+                                ?.let { season -> if (season.title.isBlank()) "合集" else "合集：${season.title}" },
+                            onCollectionClick = {
+                                onDismissEndDrawer()
+                                if (landscapeCommentPanelVisible) onLandscapeCommentClick()
+                                showVideoSettings = false
+                                showCollectionOnly = true
+                                showEpisodeMenu = true
+                            },
+                            onAuthorClick = actions.onOpenAuthorPreview,
+                            onOpenDetails = actions.onOpenVideoDetails,
+                            modifier = Modifier
+                                .windowInsetsPadding(playerControlHorizontalInsets(true, true))
+                                .padding(horizontal = 16.dp)
+                                .widthIn(max = 560.dp)
+                                .fillMaxWidth(),
+                        )
+                    }
                     key(player, bvid, cid) {
                         BottomControlBar(
-                            showPlayPauseButton = hideCenterPlayback,
+                            showPlayPauseButton = hideCenterPlayback || portraitFullscreenChrome,
                             isPlaying = effectiveIsPlaying,
                             onPlayPauseClick = { togglePlayPause() },
                             simplifiedPortrait = simplifiedPortraitChrome,
@@ -1771,18 +1832,7 @@ private fun VideoPlayerOverlayContent(
                             onRatioClick = { showRatioMenu = true },
                             onPreviousEpisodeClick = { navigateEpisode(forward = false) },
                             onNextEpisodeClick = { navigateEpisode(forward = true) },
-                            onEpisodeClick = {
-                                if (hasExternalPlaylist && pages.size > 1) {
-                                    showEpisodeSourceMenu = true
-                                } else if (hasExternalPlaylist) {
-                                    onExternalPlaylistClick()
-                                } else if (pages.size > 1 || ugcSeason?.sections?.any { it.episodes.isNotEmpty() } == true) {
-                                    onDismissEndDrawer()
-                                    if (landscapeCommentPanelVisible) onLandscapeCommentClick()
-                                    showVideoSettings = false
-                                    showEpisodeMenu = true
-                                }
-                            },
+                            onEpisodeClick = openEpisodeSelection,
                             hasEpisodeEntry = hasEpisodeEntry,
                             onToggleFullscreen = onToggleFullscreen,
                             subtitleControlState = subtitleControlState,
@@ -2050,7 +2100,7 @@ private fun VideoPlayerOverlayContent(
             }
         }
 
-        val showCenterPlaybackControl = !hideCenterPlayback && showPlayerChrome &&
+        val showCenterPlaybackControl = !hideCenterPlayback && !portraitFullscreenChrome && showPlayerChrome &&
             (pluginPlaybackStatus.first || player.playbackState == Player.STATE_READY ||
                 player.playbackState == Player.STATE_BUFFERING || player.playbackState == Player.STATE_ENDED) &&
             !isSeekScrubbing && !endDrawerVisible && !landscapeCommentPanelVisible && !showInsightDetails
@@ -2336,21 +2386,20 @@ private fun VideoPlayerOverlayContent(
 
         if (showPortraitMore) {
             val entries = buildList<Pair<String, () -> Unit>> {
+                if (portraitFullscreenChrome) {
+                    actions.onEnterCleanScreen?.let { add("清屏播放" to it) }
+                    actions.onOpenVideoDetails?.let { add("视频详情" to it) }
+                }
                 add("播放器设置" to { showVideoSettings = true })
                 add((if (danmakuEnabled) "关闭弹幕" else "开启弹幕") to onDanmakuToggle)
                 add("发弹幕" to onDanmakuInputClick)
                 add("弹幕设置" to { showDanmakuSettings = true })
                 if (bvid.isNotBlank()) {
-                    if (!usePortraitGlassDock || !showFullscreenActionItems) {
-                        add((if (isCoined) "投币 · 已投" else "投币") to onCoin)
-                    }
                     if (showDislikeAction) add((if (state.isDisliked) "取消点踩" else "点踩") to onDislike)
-                    if (!isFullscreen || !showFullscreenActionItems) {
+                    if (!isFullscreen) {
+                        add((if (isCoined) "投币 · 已投" else "投币") to onCoin)
                         add("点赞" to onToggleLike)
                         add("收藏" to onToggleFavorite)
-                    }
-                    if (!isFullscreen || !showFullscreenActionItems) {
-                        if (isFullscreen) add("评论" to onLandscapeCommentClick)
                         add("分享" to { onShare?.invoke() ?: openVideoShareSheet() })
                     }
                 }
@@ -2359,7 +2408,10 @@ private fun VideoPlayerOverlayContent(
                         when {
                             hasExternalPlaylist && pages.size > 1 -> showEpisodeSourceMenu = true
                             hasExternalPlaylist -> onExternalPlaylistClick()
-                            else -> showEpisodeMenu = true
+                            else -> {
+                                showCollectionOnly = false
+                                showEpisodeMenu = true
+                            }
                         }
                     })
                     add("上一集" to { navigateEpisode(forward = false) })
@@ -2387,6 +2439,13 @@ private fun VideoPlayerOverlayContent(
             com.android.purebilibili.feature.video.ui.components.PlayerSelectionPopup(
                 title = "更多",
                 source = activeMoreSource,
+                placement = PlayerListPopupPlacement.ANCHOR_END,
+                anchorBounds = activeMoreSource.anchorBounds?.let { bounds ->
+                    IntRect(
+                        bounds.left.roundToInt(), bounds.top.roundToInt(),
+                        bounds.right.roundToInt(), bounds.bottom.roundToInt(),
+                    )
+                },
                 onDismissRequest = { showPortraitMore = false },
             ) {
                 entries.forEachIndexed { index, (label, action) ->
@@ -2577,6 +2636,7 @@ private fun VideoPlayerOverlayContent(
                 source = if (simplifiedPortraitChrome) moreSource else actionSources[PlayerControlAnchor.EPISODES],
                 onDismiss = { showEpisodeSourceMenu = false },
                 onPartsClick = {
+                    showCollectionOnly = false
                     onDismissEndDrawer()
                     if (landscapeCommentPanelVisible) onLandscapeCommentClick()
                     showVideoSettings = false
@@ -2587,19 +2647,23 @@ private fun VideoPlayerOverlayContent(
         }
 
         if (showEpisodeMenu) {
+            // 合集与当前稿件的分 P 各自保存排序，不改变播放器原有的续播顺序来源。
+            val episodeMenuSession = if (showCollectionOnly && pages.size > 1) {
+                rememberPiliCollectionMenuSession(ugcSeason, bvid, cid, loadSubscription = isLoggedIn)
+            } else collectionSession
             PlayerEpisodeMenu(
-                pages = pages,
+                pages = if (showCollectionOnly) emptyList() else pages,
                 currentPageIndex = currentPageIndex,
-                ugcSeason = ugcSeason.takeUnless { hasExternalPlaylist },
+                ugcSeason = ugcSeason.takeUnless { hasExternalPlaylist && !showCollectionOnly },
                 currentBvid = bvid,
                 currentCid = cid,
                 isFullscreen = isFullscreen,
                 playerBounds = playerBoundsInWindow,
                 cover = coverUrl,
-                isReversed = collectionSession.isReversed,
-                onReverse = collectionSession.onReverse,
-                isSubscribed = collectionSession.isSubscribed,
-                onSubscriptionChange = collectionSession.onSubscriptionChange,
+                isReversed = episodeMenuSession.isReversed,
+                onReverse = episodeMenuSession.onReverse,
+                isSubscribed = episodeMenuSession.isSubscribed,
+                onSubscriptionChange = episodeMenuSession.onSubscriptionChange,
                 onCoverLongPress = contentActions.onSaveCollectionCover,
                 onDismiss = { showEpisodeMenu = false },
                 onPageSelect = { index ->

@@ -301,6 +301,7 @@ internal fun SeekPreviewBubble(
     if (previewHeightDp == 0) {
         SeekPreviewBubbleSimple(
             targetPositionMs, currentPositionMs, offsetX, containerWidth, placement, modifier,
+            requestImage = false,
         )
         return
     }
@@ -623,9 +624,15 @@ internal fun SeekPreviewBubbleSimple(
     offsetX: Float,
     containerWidth: Float,
     placement: SeekPreviewBubblePlacement = SeekPreviewBubblePlacement.Anchored,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    requestImage: Boolean = true,
 ) {
     val configuration = LocalConfiguration.current
+    if (requestImage && resolveSeekPreviewBubbleHeightDp(configuration.screenWidthDp, configuration.screenHeightDp) > 0) {
+        com.android.purebilibili.feature.video.screen.VideoUiWorkConsumerEffect(
+            com.android.purebilibili.feature.video.playback.policy.VideoUiWorkKind.SEEK_PREVIEW,
+        )
+    }
     val style = remember(configuration.screenWidthDp) {
         resolveSeekPreviewBubbleStyle(configuration.screenWidthDp)
     }

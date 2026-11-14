@@ -11,10 +11,12 @@ import android.content.IntentFilter
 import android.content.res.Configuration
 import android.os.BatteryManager
 import com.android.purebilibili.core.ui.components.appGlassMenuSource
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
@@ -199,7 +201,8 @@ fun TopControlBar(
         ) {
             PiliHeaderSlots(
                 hasTitle = hasTitle,
-                allowSeparateTitleRow = isFullscreen && !isPortrait,
+                allowSeparateTitleRow = isFullscreen,
+                alignEdgesToTop = showPortraitAuthor,
                 left = {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(buttonSpacing)) {
                         HeaderIcon(Icons.AutoMirrored.Outlined.ArrowBack, "返回", onBack, iconSize = if (glass) 15 else 20)
@@ -274,7 +277,18 @@ fun TopControlBar(
                             HeaderIcon(Icons.Outlined.PictureInPicture, "画中画", onPipClick)
                         }
                         if (onMoreClick != null) {
-                            HeaderIcon(Icons.Outlined.MoreVert, if (simplifiedPortrait) "更多" else "更多设置", onMoreClick, modifier = moreMenuSource?.let { Modifier.appGlassMenuSource(it, onOpen = onMoreClick) } ?: Modifier)
+                            HeaderIcon(
+                                Icons.Outlined.MoreVert,
+                                if (simplifiedPortrait) "更多" else "更多设置",
+                                onMoreClick,
+                                modifier = moreMenuSource?.let {
+                                    Modifier.appGlassMenuSource(
+                                        it,
+                                        onOpen = onMoreClick,
+                                        trackAnchorWhenDisabled = true,
+                                    )
+                                } ?: Modifier,
+                            )
                         }
                     }
                 },
@@ -392,7 +406,7 @@ fun TopControlBar(
 
 /** 竖屏全屏显示当前 UP 主；未知关注状态与未关注分开呈现，取关复用确认流程。 */
 @Composable
-private fun PortraitPlayerAuthorRow(
+internal fun PortraitPlayerAuthorRow(
     authorKey: String,
     authorName: String,
     authorFace: String,
@@ -400,6 +414,7 @@ private fun PortraitPlayerAuthorRow(
     followStatusKnown: Boolean,
     onFollowClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onAuthorClick: (() -> Unit)? = null,
 ) {
     val followAction = rememberFollowActionWithConfirmation(
         targetKey = authorKey,
@@ -412,33 +427,44 @@ private fun PortraitPlayerAuthorRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        if (authorFace.isNotBlank()) {
-            AsyncImage(
-                model = FormatUtils.fixImageUrl(authorFace),
-                contentDescription = "$authorName 的头像",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(30.dp)
-                    .clip(CircleShape),
-            )
-        } else {
-            AppIcon(
-                imageVector = Icons.Outlined.AccountCircle,
-                contentDescription = "$authorName 的头像",
-                tint = Color.White,
-                modifier = Modifier.size(30.dp),
+        Row(
+            modifier = Modifier.weight(1f, fill = false).then(
+                if (onAuthorClick != null) Modifier
+                    .heightIn(min = 48.dp)
+                    .clickable(role = Role.Button, onClickLabel = "查看 $authorName 的资料", onClick = onAuthorClick)
+                else Modifier,
+            ),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (authorFace.isNotBlank()) {
+                AsyncImage(
+                    model = FormatUtils.fixImageUrl(authorFace),
+                    contentDescription = "$authorName 的头像",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(30.dp)
+                        .clip(CircleShape),
+                )
+            } else {
+                AppIcon(
+                    imageVector = Icons.Outlined.AccountCircle,
+                    contentDescription = "$authorName 的头像",
+                    tint = Color.White,
+                    modifier = Modifier.size(30.dp),
+                )
+            }
+            AppText(
+                text = authorName,
+                color = Color.White,
+                fontSize = 14.sp,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+                tapToCopyEnabled = false,
             )
         }
-        AppText(
-            text = authorName,
-            color = Color.White,
-            fontSize = 14.sp,
-            maxLines = 1,
-            softWrap = false,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-            tapToCopyEnabled = false,
-        )
         PlayerControlTextAction(
             text = when {
                 !followStatusKnown -> "待确认"
@@ -486,51 +512,117 @@ internal fun PortraitEngagementRail(
     val gesture = if (likeStatusKnown) {
         piliHeaderLikeGesture(triplePress, isLiked && isCoined && isFavorited, likeClick, onTriple)
     } else null
-    // 玻璃专属：整列共用一个外壳，子按钮不再各自绘制圆形玻璃；原生保留独立按钮。
+    // 玻璃专属：整列共用一个外壳；原生直接展示图标与文字，不绘制圆形背景。
     Box(modifier = modifier) {
         PlayerControlGlassGroup(enabled = glassDock) {
             Column(
                 modifier = Modifier
-                    .width(52.dp)
-                    .then(if (glassDock) Modifier.padding(vertical = 8.dp) else Modifier),
+                    .width(64.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(vertical = if (glassDock) 8.dp else 0.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(if (glassDock) 8.dp else 12.dp),
+                verticalArrangement = Arrangement.spacedBy(if (glassDock) 4.dp else 8.dp),
             ) {
                 Box(Modifier.likeBurstAnchor()) {
-                    HeaderIcon(
-                        if (likeStatusKnown && isLiked) Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp,
-                        if (likeStatusKnown) "点赞" else "点赞状态尚未确认", onLike,
-                        active = likeStatusKnown && isLiked, iconSize = 24, buttonSizeDp = 44,
+                    PortraitRailAction(
+                        icon = if (likeStatusKnown && isLiked) Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp,
+                        label = "点赞", onClick = onLike,
+                        active = likeStatusKnown && isLiked,
                         gestureModifier = gesture, progress = triplePress.progress,
                         count = likeCount.takeIf { com.android.purebilibili.core.store.FullscreenActionCount.LIKE in visibleCounts },
                     )
                 }
-                if (glassDock) {
-                    HeaderIcon(AppIcons.BiliCoin, "投币", onCoin, active = isCoined,
-                        iconSize = 24, buttonSizeDp = 44, progress = triplePress.progress)
-                } else {
-                    HeaderIcon(Icons.Outlined.Forum, "评论", onComment, iconSize = 24, buttonSizeDp = 44,
-                        count = commentCount.takeIf { com.android.purebilibili.core.store.FullscreenActionCount.COMMENT in visibleCounts })
-                }
-                HeaderIcon(
-                    if (isFavorited) Icons.Filled.Star else Icons.Outlined.StarBorder,
-                    "收藏", onFavorite, active = isFavorited, iconSize = 24, buttonSizeDp = 44,
+                PortraitRailAction(
+                    icon = Icons.Outlined.Forum, label = "评论", onClick = onComment,
+                    count = commentCount.takeIf { com.android.purebilibili.core.store.FullscreenActionCount.COMMENT in visibleCounts },
+                )
+                PortraitRailAction(
+                    icon = AppIcons.BiliCoin, label = "投币", onClick = onCoin,
+                    active = isCoined, progress = triplePress.progress,
+                )
+                PortraitRailAction(
+                    icon = if (isFavorited) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                    label = "收藏", onClick = onFavorite, active = isFavorited,
                     onLongClick = onQuickFavorite, modifier = Modifier.favoriteFolderMenuSource(),
+                    progress = triplePress.progress,
                     count = favoriteCount.takeIf { com.android.purebilibili.core.store.FullscreenActionCount.FAVORITE in visibleCounts },
                 )
-                if (glassDock) {
-                    HeaderIcon(Icons.Outlined.Forum, "评论", onComment, iconSize = 24, buttonSizeDp = 44,
-                        count = commentCount.takeIf { com.android.purebilibili.core.store.FullscreenActionCount.COMMENT in visibleCounts })
-                }
-                HeaderIcon(Icons.Outlined.Share, "分享", onShare, iconSize = 24, buttonSizeDp = 44,
-                    modifier = shareMenuSource?.let { Modifier.appGlassMenuSource(it, onOpen = onShare) } ?: Modifier)
+                PortraitRailAction(
+                    icon = Icons.Outlined.Share, label = "分享", onClick = onShare,
+                    modifier = shareMenuSource?.let { Modifier.appGlassMenuSource(it, onOpen = onShare) } ?: Modifier,
+                )
             }
         }
     }
 }
 
+/** 文字与计数占用同一固定槽位，整项均可点击，长按与图标区域保持同一行为。 */
+@Composable
+@OptIn(ExperimentalFoundationApi::class)
+private fun PortraitRailAction(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    active: Boolean = false,
+    count: Long? = null,
+    onLongClick: (() -> Unit)? = null,
+    gestureModifier: Modifier? = null,
+    progress: Float = 0f,
+) {
+    val accent = AppContentColors.accent()
+    val feedbackClick = appActionWithFeedback(com.android.purebilibili.core.ui.AppHapticScene.VIDEO_ACTIONS, onClick)
+    Column(
+        modifier = modifier
+            .width(64.dp)
+            .heightIn(min = 68.dp)
+            .semantics(mergeDescendants = true) {
+                contentDescription = label
+                selected = active
+                if (gestureModifier != null) {
+                    role = Role.Button
+                    onClick(action = { feedbackClick(); true })
+                }
+            }
+            .then(gestureModifier ?: Modifier.combinedClickable(
+                role = Role.Button, onClick = feedbackClick, onLongClick = onLongClick,
+            ))
+            .padding(vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Box(
+            modifier = Modifier.size(44.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (progress > 0f) {
+                Canvas(Modifier.size(32.dp)) {
+                    drawArc(accent, -90f, -360f * progress, useCenter = false, style = Stroke(2.dp.toPx()))
+                }
+            }
+            AppIcon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (active) accent else Color.White,
+                modifier = Modifier.size(26.dp),
+            )
+        }
+        AppText(
+            text = count?.let(::formatPlayerActionCount) ?: label,
+            color = Color.White,
+            fontSize = 11.sp,
+            lineHeight = 16.sp,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
+            tapToCopyEnabled = false,
+            modifier = Modifier.widthIn(max = 60.dp),
+        )
+    }
+}
+
 /**
- * 左右操作先按自然尺寸测量；横屏全屏的标题空间不足时独占下一行。
+ * 左右操作先按自然尺寸测量；全屏标题空间不足时独占下一行。
  * 由实际播放器宽度判断，因此左右侧栏、窄窗口和大字体共用同一条布局路径。
  * 材质只由各控件负责，不改变玻璃、MD3、Miuix 的字号、按钮尺寸或默认间距。
  */
@@ -538,6 +630,7 @@ internal fun PortraitEngagementRail(
 private fun PiliHeaderSlots(
     hasTitle: Boolean,
     allowSeparateTitleRow: Boolean,
+    alignEdgesToTop: Boolean,
     left: @Composable () -> Unit,
     right: @Composable () -> Unit,
     title: @Composable () -> Unit,
@@ -583,8 +676,8 @@ private fun PiliHeaderSlots(
                     scaleX = scale; scaleY = scale; transformOrigin = TransformOrigin(0f, 0f)
                 }
             } else {
-                leftPlaceable.placeRelative(0, (rowHeight - leftPlaceable.height) / 2)
-                rightPlaceable.placeRelative(width - rightPlaceable.width, (rowHeight - rightPlaceable.height) / 2)
+                leftPlaceable.placeRelative(0, if (alignEdgesToTop) 0 else (rowHeight - leftPlaceable.height) / 2)
+                rightPlaceable.placeRelative(width - rightPlaceable.width, if (alignEdgesToTop) 0 else (rowHeight - rightPlaceable.height) / 2)
             }
             titlePlaceable?.placeRelative(
                 if (separateTitleRow) 0 else leftPlaceable.width,

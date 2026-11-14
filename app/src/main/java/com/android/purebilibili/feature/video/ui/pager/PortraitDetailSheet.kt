@@ -8,6 +8,7 @@ import com.android.purebilibili.core.ui.components.AppText
 import com.android.purebilibili.core.ui.components.AppHorizontalDivider
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -57,6 +58,7 @@ fun PortraitDetailSheet(
     visible: Boolean,
     onDismiss: () -> Unit,
     info: ViewInfo?,
+    modifier: Modifier = Modifier,
     currentCid: Long = 0L,
     recommendationTitle: String = "推荐视频",
     recommendations: List<RelatedVideo> = emptyList(),
@@ -65,13 +67,26 @@ fun PortraitDetailSheet(
     onCollectionItemClick: (bvid: String, cid: Long) -> Unit = { _, _ -> },
     onAuthorClick: (Long) -> Unit = {},
     danmakuEnabled: Boolean = true,
-    onDanmakuToggle: () -> Unit = {}
+    onDanmakuToggle: () -> Unit = {},
+    onActiveChange: (Boolean) -> Unit = {},
 ) {
     if (!visible && info == null) return
 
     val configuration = LocalConfiguration.current
     val screenHeight = configuration.screenHeightDp.dp
     val sheetMotion = rememberAppBottomSheetMotion()
+    val contentVisibility = remember { MutableTransitionState(false) }
+    val scrimVisibility = remember { MutableTransitionState(false) }
+    LaunchedEffect(visible) {
+        contentVisibility.targetState = visible
+        scrimVisibility.targetState = visible
+    }
+    // 退出动画尚未结束时仍由半屏接管触摸，避免视频列表提前恢复翻页。
+    val active = visible || contentVisibility.currentState || scrimVisibility.currentState ||
+        !contentVisibility.isIdle || !scrimVisibility.isIdle
+    val latestOnActiveChange by rememberUpdatedState(onActiveChange)
+    LaunchedEffect(active) { latestOnActiveChange(active) }
+    DisposableEffect(Unit) { onDispose { latestOnActiveChange(false) } }
 
     // 拦截返回键
     com.android.purebilibili.core.ui.LocalNavigationBackHandler(enabled = visible) {
@@ -79,12 +94,12 @@ fun PortraitDetailSheet(
     }
 
     Box(
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier,
         contentAlignment = Alignment.BottomCenter
     ) {
         // 1. 遮罩层 (Scrim)
         AnimatedVisibility(
-            visible = visible,
+            visibleState = scrimVisibility,
             enter = sheetMotion.scrimEnter,
             exit = sheetMotion.scrimExit
         ) {
@@ -101,7 +116,7 @@ fun PortraitDetailSheet(
 
         // 2. 内容层 (Sheet Content)
         AnimatedVisibility(
-            visible = visible,
+            visibleState = contentVisibility,
             enter = sheetMotion.contentEnter,
             exit = sheetMotion.contentExit
         ) {

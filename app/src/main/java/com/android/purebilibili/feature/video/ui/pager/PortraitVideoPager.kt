@@ -945,6 +945,7 @@ fun PortraitVideoPager(
     }
     var lastAutoAdvancedBvid by remember { mutableStateOf<String?>(null) }
     var portraitOverlayVisible by rememberSaveable(initialInfo.bvid) { mutableStateOf(true) }
+    var portraitCleanScreen by rememberSaveable(initialInfo.bvid) { mutableStateOf(false) }
     val lifecycleOwner = LocalLifecycleOwner.current
     var isLifecycleResumed by remember(lifecycleOwner) {
         mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
@@ -2075,8 +2076,18 @@ fun PortraitVideoPager(
                     }
                 },
                 portraitOverlayVisible = portraitOverlayVisible,
+                portraitCleanScreen = portraitCleanScreen,
+                onPortraitCleanScreenChange = { clean ->
+                    if (page == pagerState.currentPage) {
+                        portraitCleanScreen = clean
+                        portraitOverlayVisible = !clean
+                    }
+                },
                 onPortraitOverlayVisibleChange = { visible ->
-                    portraitOverlayVisible = visible
+                    if (page == pagerState.currentPage) {
+                        portraitOverlayVisible = visible
+                        if (visible) portraitCleanScreen = false
+                    }
                 },
                 onRequestVideoChange = { targetBvid ->
                     val normalizedBvid = targetBvid.trim()
@@ -2259,6 +2270,8 @@ private fun VideoPageItem(
     onCommentOverlayActiveChange: (Boolean) -> Unit = {},
     onUpPreviewActiveChange: (Boolean) -> Unit,
     portraitOverlayVisible: Boolean,
+    portraitCleanScreen: Boolean,
+    onPortraitCleanScreenChange: (Boolean) -> Unit,
     onPortraitOverlayVisibleChange: (Boolean) -> Unit,
     onRequestVideoChange: (String) -> Unit,
     onRequestCollectionItem: (bvid: String, cid: Long, collectionContext: UgcSeason?) -> Unit
@@ -2378,7 +2391,7 @@ private fun VideoPageItem(
         mutableStateOf<com.android.purebilibili.feature.video.share.VideoSharePayload?>(null)
     }
     com.android.purebilibili.feature.video.share.VideoShareSheetHost(
-        payload = pendingPortraitShare,
+        payload = pendingPortraitShare.takeIf { isCurrentPage },
         glassSource = portraitShareMenuSource,
         onDismiss = { pendingPortraitShare = null },
     )
@@ -2618,10 +2631,11 @@ private fun VideoPageItem(
     }
 
     // 互动状态
-    var showCommentSheet by remember { mutableStateOf(false) }
-    var showDetailSheet by remember { mutableStateOf(false) }
+    var showCommentSheet by remember(bvid) { mutableStateOf(false) }
+    var showDetailSheet by remember(bvid) { mutableStateOf(false) }
+    var detailSheetTransitionActive by remember(bvid) { mutableStateOf(false) }
     var showUpPreview by remember(bvid) { mutableStateOf(false) }
-    var commentSheetVisibilityProgress by remember { mutableFloatStateOf(0f) }
+    var commentSheetVisibilityProgress by remember(bvid) { mutableFloatStateOf(0f) }
     var upPreviewVisibilityProgress by remember(bvid) { mutableFloatStateOf(0f) }
     val portraitCommentStateHandle = commentViewModel.commentState.collectAsStateWithLifecycle()
     val subReplyState by commentViewModel.subReplyState.collectAsStateWithLifecycle()
@@ -2671,18 +2685,26 @@ private fun VideoPageItem(
         commentSheetHeightFraction = overlaySheetExpansion.sheetHeightFraction,
         fitToAvailableBand = upPreviewDominatesOverlay,
     )
+    val danmakuInputVisible by viewModel.showDanmakuInputDialog.collectAsStateWithLifecycle()
+    val commentInputVisible by viewModel.showCommentDialog.collectAsStateWithLifecycle()
     // UP 预览 / 简介半屏打开时必须关掉页级 pointerInput。
     // 父层 awaitFirstDown(requireUnconsumed=false) 会在整段单指滑动中占住手势循环，
     // LazyVerticalGrid 收不到跟手滚动（评论半屏靠 playerGesturesEnabled=false 才正常）。
     val playerGesturesEnabled =
         commentExpansionTransform.playerGesturesEnabled &&
-            !showDetailSheet && !portraitAnyMenuVisible && !portraitScreenLocked && !portraitComposerVisible
+            !showCommentSheet && !subReplyState.visible && !showUpPreview &&
+            !showDetailSheet && !detailSheetTransitionActive && !portraitAnyMenuVisible && !portraitScreenLocked && !portraitComposerVisible &&
+            !danmakuInputVisible && !commentInputVisible
 
     LaunchedEffect(isCurrentPage, bvid) {
         if (!isCurrentPage) {
             showCommentSheet = false
             showDetailSheet = false
+            detailSheetTransitionActive = false
             showUpPreview = false
+            pendingPortraitShare = null
+            showPortraitExternalPlaylist = false
+            portraitComposerVisible = false
             commentSheetVisibilityProgress = 0f
             upPreviewVisibilityProgress = 0f
             onCommentOverlayActiveChange(false)
@@ -2693,6 +2715,10 @@ private fun VideoPageItem(
     LaunchedEffect(
         isCurrentPage,
         showCommentSheet,
+        showDetailSheet,
+        detailSheetTransitionActive,
+        commentInputVisible,
+        danmakuInputVisible,
         subReplyState.visible,
         commentSheetVisibilityProgress,
         portraitAnyMenuVisible,
@@ -2702,10 +2728,12 @@ private fun VideoPageItem(
         onCommentOverlayActiveChange(
             isCurrentPage && (
                 portraitAnyMenuVisible || portraitScreenLocked || portraitComposerVisible ||
+                    commentInputVisible || danmakuInputVisible ||
                     shouldBlockPortraitPagerScrollForCommentOverlay(
                         commentSheetVisible = showCommentSheet,
                         subReplyVisible = subReplyState.visible,
                         commentVisibilityProgress = commentSheetVisibilityProgress,
+                        detailSheetVisible = showDetailSheet || detailSheetTransitionActive,
                     )
                 )
         )
@@ -2885,11 +2913,15 @@ private fun VideoPageItem(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-    val danmakuInputVisible by viewModel.showDanmakuInputDialog.collectAsStateWithLifecycle()
-    val controlsOverlayOpen = showCommentSheet || subReplyState.visible || showDetailSheet ||
+    val controlsOverlayOpen = showCommentSheet || subReplyState.visible || showDetailSheet || detailSheetTransitionActive ||
         showUpPreview || commentSheetVisibilityProgress > 0.001f || upPreviewVisibilityProgress > 0.001f ||
         portraitAnyMenuVisible || portraitScreenLocked || portraitComposerVisible ||
-        danmakuInputVisible
+        danmakuInputVisible || commentInputVisible
+    com.android.purebilibili.core.ui.LocalNavigationBackHandler(
+        enabled = isCurrentPage && portraitCleanScreen && !controlsOverlayOpen && !isInPipMode,
+    ) {
+        onPortraitCleanScreenChange(false)
+    }
     com.android.purebilibili.core.ui.performance.VideoPlaybackRefreshRateEffect(
         player = exoPlayer,
         eligible = isCurrentPage && isPortraitPlaybackAllowed && isPlayerReadyForThisVideo &&
@@ -2906,7 +2938,7 @@ private fun VideoPageItem(
     )
     val latestOnPortraitOverlayVisibleChange by rememberUpdatedState(onPortraitOverlayVisibleChange)
     LaunchedEffect(bvid, isCurrentPage) {
-        if (isCurrentPage) latestOnPortraitOverlayVisibleChange(true)
+        if (isCurrentPage) latestOnPortraitOverlayVisibleChange(!portraitCleanScreen)
     }
     // User activity and blocking overlays restart the countdown; playback-position
     // polling does not. Hidden controls stay hidden until the existing tap gesture.
@@ -3077,16 +3109,18 @@ private fun VideoPageItem(
                 isCurrentPage,
                 playerGesturesEnabled,
                 portraitOverlayVisible,
+                portraitCleanScreen,
                 danmakuEnabled,
                 danmakuManager,
                 doubleTapSeekEnabled,
                 seekForwardSeconds,
                 seekBackwardSeconds
             ) {
+                if (!isCurrentPage || !playerGesturesEnabled) return@pointerInput
                 detectPlayerTapGestures(
                     doubleTapSlopPx = android.view.ViewConfiguration.get(context).scaledDoubleTapSlop.toFloat(),
                     captureSingleTap = { offset ->
-                        if (playerGesturesEnabled && isCurrentPage && danmakuEnabled &&
+                        if (playerGesturesEnabled && isCurrentPage && danmakuEnabled && !portraitCleanScreen &&
                             shouldHandlePortraitTapGesture(scale = scale)
                         ) danmakuManager.captureTap(danmakuTapCoordinates.value, offset) else null
                     },
@@ -3098,16 +3132,14 @@ private fun VideoPageItem(
                         }
                     },
                     onTap = {
-                        if (
-                            !playerGesturesEnabled ||
-                            !isCurrentPage ||
-                            !shouldHandlePortraitTapGesture(scale = scale)
-                        ) {
-                            return@detectPlayerTapGestures
+                        if (!playerGesturesEnabled || !isCurrentPage) return@detectPlayerTapGestures
+                        if (portraitCleanScreen) {
+                            onPortraitCleanScreenChange(false)
+                        } else if (shouldHandlePortraitTapGesture(scale = scale)) {
+                            onPortraitOverlayVisibleChange(
+                                resolvePortraitOverlayVisibilityAfterTap(portraitOverlayVisible)
+                            )
                         }
-                        onPortraitOverlayVisibleChange(
-                            resolvePortraitOverlayVisibilityAfterTap(portraitOverlayVisible)
-                        )
                     },
                     onDoubleTap = { offset ->
                         if (
@@ -3204,6 +3236,7 @@ private fun VideoPageItem(
                 playerGesturesEnabled,
                 playerInteractionSettings
             ) {
+                if (!isCurrentPage || !playerGesturesEnabled) return@pointerInput
                 var totalDragDistanceX = 0f
                 try {
                     detectHorizontalDragGestures(
@@ -3389,7 +3422,7 @@ private fun VideoPageItem(
                         )
 
                         if (shouldComposePortraitDanmakuOverlay(
-                                danmakuEnabled = danmakuEnabled && pipDanmakuVisible,
+                                danmakuEnabled = danmakuEnabled && pipDanmakuVisible && !portraitCleanScreen,
                                 surfaceMode = danmakuSurfaceMode,
                                 expectedMode = PortraitDanmakuSurfaceMode.VideoViewport,
                                 isCurrentPage = isCurrentPage,
@@ -3401,7 +3434,11 @@ private fun VideoPageItem(
                                 videoWidth = exoPlayer.videoSize.width,
                                 videoHeight = exoPlayer.videoSize.height,
                                 resizeMode = playerViewRef?.resizeMode ?: portraitPagerResizeMode,
-                                modifier = Modifier.fillMaxSize()
+                                // 沉浸时挖孔仍占顶部边缘：与 Page 表面共用同一安全 inset，
+                                // 首行弹幕不得被屏幕边缘/挖孔裁切。
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(top = pageDanmakuTopInset)
                             )
                         }
                     }
@@ -3411,7 +3448,7 @@ private fun VideoPageItem(
 
         if (
             shouldComposePortraitDanmakuOverlay(
-                danmakuEnabled = danmakuEnabled && pipDanmakuVisible,
+                danmakuEnabled = danmakuEnabled && pipDanmakuVisible && !portraitCleanScreen,
                 surfaceMode = danmakuSurfaceMode,
                 expectedMode = PortraitDanmakuSurfaceMode.Page,
                 isCurrentPage = isCurrentPage,
@@ -3801,8 +3838,15 @@ private fun VideoPageItem(
         loadedPageInfo = loadedPageInfo,
         fallbackInfo = fallbackDetailInfo,
     )
-    val loadedEngagementInfo = loadedPageInfo?.takeIf { it.bvid == bvid && it.aid == activeAid }
-        ?: currentSuccess?.info?.takeIf { it.bvid == bvid && it.aid == activeAid }
+    val engagementSubject = VideoSubjectSnapshot(
+        bvid = bvid, cid = snapshotCid, aid = activeAid, ownerMid = seedAuthorMid,
+        title = title, coverUrl = cover, durationMs = progressDuration, generation = 1L,
+    )
+    val loadedEngagementInfo = loadedPageInfo?.takeIf {
+        resolvePortraitEngagementSubject(engagementSubject, it) != null
+    } ?: currentSuccess?.info?.takeIf {
+        resolvePortraitEngagementSubject(engagementSubject, it) != null
+    }
     val initialOwnerMid = loadedEngagementInfo?.owner?.mid?.takeIf { it > 0L }
         ?: portraitDetailInfo?.owner?.mid?.takeIf { it > 0L } ?: seedAuthorMid
     val pageEngagementSession = engagementOwner.session(
@@ -3928,8 +3972,10 @@ private fun VideoPageItem(
                 ),
                 isVisible = isCurrentPage && resolvePortraitOverlayControlsVisible(
                     portraitOverlayVisible = portraitOverlayVisible,
-                    showDetailSheet = showDetailSheet,
-                ) && commentSheetVisibilityProgress <= 0.001f,
+                    showDetailSheet = showDetailSheet || detailSheetTransitionActive,
+                    otherSheetVisible = showCommentSheet || subReplyState.visible || showUpPreview ||
+                        commentSheetVisibilityProgress > 0.001f || upPreviewVisibilityProgress > 0.001f,
+                ),
                 isFullscreen = true,
                 playerViewportSize = androidx.compose.ui.unit.IntSize(portraitPageWidthPx, portraitPageHeightPx),
                 currentQualityLabel = qualityLabel,
@@ -4049,6 +4095,16 @@ private fun VideoPageItem(
             )
         val portraitOverlayActions = com.android.purebilibili.feature.video.ui.overlay.VideoPlayerOverlayActions(
                 onToggleVisible = { onPortraitOverlayVisibleChange(!portraitOverlayVisible) },
+                onEnterCleanScreen = {
+                    onPortraitCleanScreenChange(true)
+                    android.widget.Toast.makeText(
+                        context, "已清屏，轻触画面或返回恢复操作栏", android.widget.Toast.LENGTH_SHORT,
+                    ).show()
+                },
+                onOpenVideoDetails = { showDetailSheet = true },
+                onOpenAuthorPreview = portraitDetailInfo?.takeIf { it.owner.mid > 0L }?.let {
+                    { showUpPreview = true }
+                },
                 onQualitySelected = { index -> availableQualityIds.getOrNull(index)?.let(onQualitySelected) },
                 onQualityChange = onQualitySelected,
                 onAudioQualityChange = onAudioQualitySelected,
@@ -4396,10 +4452,12 @@ private fun VideoPageItem(
                 },
             )
         // 竖屏与横屏共用功能组件，玻璃材质在控制栏内部适配。
-        com.android.purebilibili.feature.video.ui.overlay.VideoPlayerOverlay(
-            state = portraitOverlayState,
-            actions = portraitOverlayActions,
-        )
+        if (isCurrentPage && !portraitCleanScreen) {
+            com.android.purebilibili.feature.video.ui.overlay.VideoPlayerOverlay(
+                state = portraitOverlayState,
+                actions = portraitOverlayActions,
+            )
+        }
     }
 
     }
@@ -4438,7 +4496,9 @@ private fun VideoPageItem(
             isCurrentPage = isCurrentPage,
             controlsVisible = resolvePortraitOverlayControlsVisible(
                 portraitOverlayVisible = portraitOverlayVisible,
-                showDetailSheet = showDetailSheet
+                showDetailSheet = showDetailSheet || detailSheetTransitionActive,
+                otherSheetVisible = showCommentSheet || subReplyState.visible || showUpPreview ||
+                    commentSheetVisibilityProgress > 0.001f || upPreviewVisibilityProgress > 0.001f,
             ),
             commentExpansionProgress = commentSheetVisibilityProgress,
             subtitleAutoPreference = subtitleAutoPreference,
@@ -4554,7 +4614,9 @@ private fun VideoPageItem(
         }
         
         PortraitDetailSheet(
-            visible = showDetailSheet,
+            visible = isCurrentPage && showDetailSheet,
+            modifier = Modifier.fillMaxSize(),
+            onActiveChange = { detailSheetTransitionActive = it },
             onDismiss = {
                 showDetailSheet = false
             },
@@ -4585,7 +4647,7 @@ private fun VideoPageItem(
 
         portraitDetailInfo?.takeIf { it.owner.mid > 0L }?.let { info ->
             UpPreviewSheet(
-                visible = showUpPreview,
+                visible = isCurrentPage && showUpPreview,
                 owner = info.owner,
                 isFollowing = isFollowing,
                 followStatusKnown = followStatusKnown,
@@ -4649,9 +4711,10 @@ internal fun resolvePortraitActiveAid(
 
 internal fun resolvePortraitOverlayControlsVisible(
     portraitOverlayVisible: Boolean,
-    showDetailSheet: Boolean
+    showDetailSheet: Boolean,
+    otherSheetVisible: Boolean = false,
 ): Boolean {
-    return portraitOverlayVisible && !showDetailSheet
+    return portraitOverlayVisible && !showDetailSheet && !otherSheetVisible
 }
 
 internal fun resolvePortraitOverlayVisibilityAfterTap(currentlyVisible: Boolean): Boolean {

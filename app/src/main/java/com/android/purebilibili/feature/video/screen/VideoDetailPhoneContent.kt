@@ -248,13 +248,19 @@ internal fun VideoDetailPhoneSuccessContentLayer(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .then(
-                                    if (floatingLiquidBottomInputBar && bottomInputBarBackdrop != null) {
+                                    if (floatingLiquidBottomInputBar && bottomInputBarBackdrop != null &&
+                                        com.android.purebilibili.core.ui.blur.LocalChromeBackdropRecordingAllowed.current
+                                    ) {
                                         Modifier.layerBackdrop(bottomInputBarBackdrop)
                                     } else {
                                         Modifier
                                     }
                                 )
-                                .hazeSourceCompat(hazeState)
+                                .then(
+                                    if (com.android.purebilibili.core.ui.blur.LocalChromeBackdropRecordingAllowed.current) {
+                                        Modifier.hazeSourceCompat(hazeState)
+                                    } else Modifier
+                                )
                                 .graphicsLayer {
                                     // 在图层阶段读动画值，模糊动画不重新组合评论与简介。
                                     val coveredBlurProgress = if (isCommentThreadVisible) {

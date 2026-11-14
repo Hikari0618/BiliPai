@@ -7,6 +7,7 @@ import com.android.purebilibili.core.util.HapticType
 import com.android.purebilibili.core.util.rememberHapticFeedback
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -24,6 +25,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -79,6 +81,7 @@ fun VideoProgressBar(
     displayPositionProvider: (() -> Long)? = null,
     seekAreaHeight: Dp? = null,
     verticalHeightScale: Float = 1f,
+    horizontalSeekOnly: Boolean = false,
 ) {
     var containerWidthPx by remember { mutableFloatStateOf(0f) }
     var dragTargetPositionMs by remember { mutableLongStateOf(displayPositionMs.coerceAtLeast(0L)) }
@@ -223,57 +226,70 @@ fun VideoProgressBar(
                                     currentOnSeek(targetPositionMs)
                                 }
                             }
-                            .pointerInput(duration) {
+                            .pointerInput(duration, horizontalSeekOnly) {
                                 var dragInProgress = false
                                 try {
                                     var dragStartPositionMs = displayPositionMs.coerceAtLeast(0L)
                                     var latestDragPositionMs = dragStartPositionMs
-                                    detectDragGestures(
-                                        onDragStart = { offset ->
-                                            val targetPositionMs = resolveSeekPositionFromTouch(
-                                                touchX = offset.x,
-                                                containerWidthPx = size.width.toFloat(),
-                                                durationMs = duration
-                                            )
-                                            dragInProgress = true
-                                            dragStartPositionMs = targetPositionMs
-                                            latestDragPositionMs = targetPositionMs
-                                            dragTargetPositionMs = targetPositionMs
-                                            currentOnSeekStart()
-                                            currentOnSeekDragStart(targetPositionMs)
-                                            if (seekHapticPolicy.start(targetPositionMs, duration, SystemClock.uptimeMillis())) {
-                                                seekHaptic(HapticType.LIGHT)
-                                            }
-                                        },
-                                        onDrag = { change, _ ->
-                                            change.consume()
-                                            val targetPositionMs = resolveSeekPositionFromTouch(
-                                                touchX = change.position.x,
-                                                containerWidthPx = size.width.toFloat(),
-                                                durationMs = duration
-                                            )
-                                            latestDragPositionMs = targetPositionMs
-                                            dragTargetPositionMs = targetPositionMs
-                                            currentOnSeekDragUpdate(targetPositionMs)
-                                            if (seekHapticPolicy.update(targetPositionMs, SystemClock.uptimeMillis())) {
-                                                seekHaptic(HapticType.GESTURE_STEP)
-                                            }
-                                        },
-                                        onDragEnd = {
-                                            val commitPositionMs = resolveSeekDragCommitPositionMs(
-                                                dragStartPositionMs = dragStartPositionMs,
-                                                latestDragPositionMs = latestDragPositionMs
-                                            )
-                                            dragInProgress = false
-                                            currentOnSeek(commitPositionMs)
-                                            seekHapticPolicy.finish()
-                                        },
-                                        onDragCancel = {
-                                            dragInProgress = false
-                                            currentOnSeekDragCancel()
-                                            seekHapticPolicy.finish()
+                                    val startDrag: (Offset) -> Unit = { offset ->
+                                        val targetPositionMs = resolveSeekPositionFromTouch(
+                                            touchX = offset.x,
+                                            containerWidthPx = size.width.toFloat(),
+                                            durationMs = duration
+                                        )
+                                        dragInProgress = true
+                                        dragStartPositionMs = targetPositionMs
+                                        latestDragPositionMs = targetPositionMs
+                                        dragTargetPositionMs = targetPositionMs
+                                        currentOnSeekStart()
+                                        currentOnSeekDragStart(targetPositionMs)
+                                        if (seekHapticPolicy.start(targetPositionMs, duration, SystemClock.uptimeMillis())) {
+                                            seekHaptic(HapticType.LIGHT)
                                         }
-                                    )
+                                    }
+                                    val updateDrag: (PointerInputChange) -> Unit = { change ->
+                                        change.consume()
+                                        val targetPositionMs = resolveSeekPositionFromTouch(
+                                            touchX = change.position.x,
+                                            containerWidthPx = size.width.toFloat(),
+                                            durationMs = duration
+                                        )
+                                        latestDragPositionMs = targetPositionMs
+                                        dragTargetPositionMs = targetPositionMs
+                                        currentOnSeekDragUpdate(targetPositionMs)
+                                        if (seekHapticPolicy.update(targetPositionMs, SystemClock.uptimeMillis())) {
+                                            seekHaptic(HapticType.GESTURE_STEP)
+                                        }
+                                    }
+                                    val endDrag: () -> Unit = {
+                                        val commitPositionMs = resolveSeekDragCommitPositionMs(
+                                            dragStartPositionMs = dragStartPositionMs,
+                                            latestDragPositionMs = latestDragPositionMs
+                                        )
+                                        dragInProgress = false
+                                        currentOnSeek(commitPositionMs)
+                                        seekHapticPolicy.finish()
+                                    }
+                                    val cancelDrag: () -> Unit = {
+                                        dragInProgress = false
+                                        currentOnSeekDragCancel()
+                                        seekHapticPolicy.finish()
+                                    }
+                                    if (horizontalSeekOnly) {
+                                        detectHorizontalDragGestures(
+                                            onDragStart = startDrag,
+                                            onHorizontalDrag = { change, _ -> updateDrag(change) },
+                                            onDragEnd = endDrag,
+                                            onDragCancel = cancelDrag,
+                                        )
+                                    } else {
+                                        detectDragGestures(
+                                            onDragStart = startDrag,
+                                            onDrag = { change, _ -> updateDrag(change) },
+                                            onDragEnd = endDrag,
+                                            onDragCancel = cancelDrag,
+                                        )
+                                    }
                                 } finally {
                                     if (shouldCancelSeekDragOnPointerInputCompletion(dragInProgress)) {
                                         currentOnSeekDragCancel()

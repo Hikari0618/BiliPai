@@ -77,7 +77,7 @@ class OfficialVideoCardTransitionPolicyTest {
     }
 
     @Test
-    fun otherSdkImplementationsKeepLiveOverridesAndPredictiveBackPolicy() {
+    fun otherSdkImplementationsKeepLiveOverridesAndCardReturnDuringPredictiveBack() {
         val plan = requireNotNull(resolveOfficialVideoCardReturnPlan(
             metadata = "int",
             oplusSdkWindow = false,
@@ -87,17 +87,17 @@ class OfficialVideoCardTransitionPolicyTest {
             sourceRadiusUnchanged = false,
             preferSystemPredictiveBack = true,
         ))
-        assertEquals(ViewAnimationType.VIEW_ANIM_FOLLOW_SYSTEM, plan.backAnimType)
+        assertEquals(ViewAnimationType.VIEW_ANIM_DEFAULT, plan.backAnimType)
         assertTrue(plan.useSourceBounds)
         assertTrue(plan.updateRadius)
         assertTrue(plan.updateEffects)
     }
 
     @Test
-    fun systemPredictiveReturnRequiresWritableFollowSystemAndKeepsMotionPolicy() {
+    fun systemPredictiveReturnPrefersCardTargetAndKeepsMotionPolicy() {
         val supported = "int|VIEW_ANIM_DEFAULT,VIEW_ANIM_FOLLOW_SYSTEM,VIEW_ANIM_NONE|Back animation type"
         assertEquals(
-            ViewAnimationType.VIEW_ANIM_FOLLOW_SYSTEM,
+            ViewAnimationType.VIEW_ANIM_DEFAULT,
             resolveOfficialReturnAnimType(supported, true, true, preferSystemPredictiveBack = true),
         )
         assertEquals(
@@ -115,6 +115,16 @@ class OfficialVideoCardTransitionPolicyTest {
             ),
         )
         assertNull(resolveOfficialReturnAnimType(null, true, true, preferSystemPredictiveBack = true))
+        assertEquals(
+            ViewAnimationType.VIEW_ANIM_FOLLOW_SYSTEM,
+            resolveOfficialReturnAnimType(
+                "int|VIEW_ANIM_FOLLOW_SYSTEM|Back animation type", true, true, preferSystemPredictiveBack = true,
+            ),
+        )
+        assertEquals(
+            ViewAnimationType.VIEW_ANIM_FOLLOW_SYSTEM,
+            resolveOfficialReturnAnimType(supported, true, false, preferSystemPredictiveBack = true),
+        )
     }
 
     @Test
