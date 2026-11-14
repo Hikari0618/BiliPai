@@ -39,7 +39,6 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -910,16 +909,27 @@ internal fun ElegantVideoCard(
         coverUrl = url
         premiumBadgeLabel = badge
     }
+    val cardVisibility = rememberVideoCardVisibility(video.bvid, video.cid)
     val coverTintState = if (homeCardDynamicTintEnabled) {
         remember(coverCacheKey) { mutableStateOf(VideoCardCoverColorStore.getCachedColor(coverCacheKey)) }
     } else null
     val coverTint = coverTintState?.value
+    val homeCardScrolling = LocalHomeCardScrolling.current
     val animatedCoverTint = if (homeCardDynamicTintEnabled) {
-        animateColorAsState(
-            targetValue = coverTint ?: Color.Transparent,
-            animationSpec = tween(durationMillis = 350),
-            label = "video_card_cover_tint",
-        ).value
+        val targetTint = coverTint ?: Color.Transparent
+        val tintAnimation = remember(coverCacheKey) { androidx.compose.animation.Animatable(targetTint) }
+        val tintMotionAllowed = !scrollLiteModeEnabled && homeCardScrolling?.value != true &&
+            cardVisibility.visible && LocalPageImageLoadingAllowed.current &&
+            com.android.purebilibili.core.ui.rememberVisualWorkActive() &&
+            !com.android.purebilibili.core.ui.LocalSystemReduceMotion.current &&
+            com.android.purebilibili.core.ui.LocalComponentMotionEnabled.current
+        // 许可变化也取消在途过渡；只更换 animationSpec 不会打断目标未变的旧动画。
+        LaunchedEffect(tintAnimation, targetTint, tintMotionAllowed) {
+            if (tintAnimation.value == targetTint) return@LaunchedEffect
+            if (tintMotionAllowed) tintAnimation.animateTo(targetTint, tween(durationMillis = 350))
+            else tintAnimation.snapTo(targetTint)
+        }
+        if (tintMotionAllowed) tintAnimation.value else targetTint
     } else Color.Transparent
     val defaultOnSurface = AppContentColors.primaryText()
     val defaultOnSurfaceVariant = AppContentColors.secondaryText()
@@ -952,7 +962,6 @@ internal fun ElegantVideoCard(
             )
         )
     }
-    val cardVisibility = rememberVideoCardVisibility(video.bvid, video.cid)
     val cardVisibleInWindow = cardVisibility.visible
     var measuredCoverSize by remember(coverCacheKey) {
         mutableStateOf(androidx.compose.ui.unit.IntSize.Zero)
@@ -1229,7 +1238,6 @@ internal fun ElegantVideoCard(
             onClick = { triggerCardClick() },
         )
     }
-    val homeCardScrolling = LocalHomeCardScrolling.current
     val homeCardTransitionAtMount = LocalHomeCardTransitionRunning.current
     val enterAnimationEnabledAtMount = remember(video.bvid) {
         resolveHomeCardEnterAnimationEnabledAtMount(
@@ -1508,9 +1516,11 @@ internal fun ElegantVideoCard(
             // crossfade 必须进 remember key：若 clearReturning 后才打开 crossfade，
             // 会新建 ImageRequest 导致 Coil 再跑一次淡入闪烁（快速返回尤其明显）。
             val coverImageRequest = remember(
+                context,
                 requestCoverUrl,
                 requestCoverCacheKey,
                 coverCrossfadeEnabled,
+                coverRequestSpec,
             ) {
                 ImageRequest.Builder(context)
                     .data(requestCoverUrl)

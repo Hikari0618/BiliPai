@@ -98,7 +98,6 @@ import com.android.purebilibili.feature.home.resolveHomeTopCollapsedHandleHeight
 import com.android.purebilibili.feature.home.resolveHomeTopTabPresentationHeight
 import com.android.purebilibili.feature.home.HomeGlassResolvedColors
 import com.android.purebilibili.feature.home.rememberHomeGlassChromeColors
-import com.android.purebilibili.feature.home.rememberHomeGlassPillColors
 import com.android.purebilibili.feature.home.resolveHomeGlassChromeStyle
 import com.android.purebilibili.feature.home.resolveHomeGlassPillStyle
 import com.android.purebilibili.feature.home.components.liquid.vibrancy
