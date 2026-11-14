@@ -813,6 +813,11 @@ internal fun SettingsRootCategoryContent(
             }
             SettingsRootCategory.SYSTEM_ABOUT -> {
                 SettingsRootCategoryEntranceSection {
+                    SettingsDetailGroup(title = com.android.purebilibili.core.performance.PERFORMANCE_CAPTURE_SECTION_TITLE) {
+                        PerformanceCaptureSection()
+                    }
+                }
+                SettingsRootCategoryEntranceSection {
                     SettingsDetailGroup(title = "问题排查") {
                         DiagnosticsSection(
                             crashTrackingEnabled = state.crashTrackingEnabled,

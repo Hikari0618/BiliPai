@@ -40,6 +40,7 @@ internal fun settingItemPath(item: PlaybackSettingItem): String {
         "navigation_behavior" -> "导航行为"
         "navigation_top_tabs" -> "顶部标签"
         "navigation_tablet" -> "平板导航"
+        com.android.purebilibili.core.performance.PERFORMANCE_CAPTURE_SECTION -> com.android.purebilibili.core.performance.PERFORMANCE_CAPTURE_SECTION_TITLE
         "diagnostics_options" -> "应用日志"
         "help_options" -> if (item.settingId == "help.easter_egg_enabled") "使用与反馈" else "更新"
         else -> null

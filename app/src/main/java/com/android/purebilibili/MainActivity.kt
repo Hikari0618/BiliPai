@@ -40,6 +40,8 @@ import androidx.appcompat.content.res.AppCompatResources
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
+import com.android.purebilibili.core.performance.bindPerformanceCapture
+import com.android.purebilibili.core.performance.PerformanceCapture
 import androidx.lifecycle.lifecycleScope
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -609,6 +611,12 @@ internal fun resolveSplashIconResIdForComponentClassName(className: String?): In
         "MainActivityAlias3D",
         "MainActivityAlias3DNoIcon",
         "MainActivitySplashIcon3D" -> R.mipmap.ic_launcher_3d
+        "MainActivityAliasBiliPaiViolet",
+        "MainActivityAliasBiliPaiVioletNoIcon",
+        "MainActivityAliasBiliPaiGreen",
+        "MainActivityAliasBiliPaiGreenNoIcon",
+        "MainActivityAliasBiliPaiInk",
+        "MainActivityAliasBiliPaiInkNoIcon",
         "MainActivityAliasBiliPai",
         "MainActivityAliasBiliPaiNoIcon",
         "MainActivitySplashBiliPai" -> R.mipmap.ic_launcher_bilipai
@@ -618,15 +626,6 @@ internal fun resolveSplashIconResIdForComponentClassName(className: String?): In
         "MainActivityAliasBiliPaiWhite",
         "MainActivityAliasBiliPaiWhiteNoIcon",
         "MainActivitySplashBiliPaiWhite" -> R.mipmap.ic_launcher_bilipai_white
-        "MainActivityAliasBiliPaiViolet",
-        "MainActivityAliasBiliPaiVioletNoIcon",
-        "MainActivitySplashBiliPaiViolet" -> R.mipmap.ic_launcher_bilipai_violet
-        "MainActivityAliasBiliPaiGreen",
-        "MainActivityAliasBiliPaiGreenNoIcon",
-        "MainActivitySplashBiliPaiGreen" -> R.mipmap.ic_launcher_bilipai_green
-        "MainActivityAliasBiliPaiInk",
-        "MainActivityAliasBiliPaiInkNoIcon",
-        "MainActivitySplashBiliPaiInk" -> R.mipmap.ic_launcher_bilipai_ink
         "MainActivityAliasBiliPaiMonet",
         "MainActivityAliasBiliPaiMonetNoIcon" -> R.mipmap.ic_launcher_bilipai_monet
         "MainActivitySplashBiliPaiMonet" -> R.mipmap.splash_icon_bilipai_monet
@@ -1160,6 +1159,7 @@ class MainActivity : AppCompatActivity() {
         VideoRepository.preloadHomeData()
         
         super.onCreate(savedInstanceState)
+        bindPerformanceCapture(kind = "main")
         lifecycleScope.launch {
             applyPreferredDisplayMode(SettingsManager.getScreenDisplayModeId(this@MainActivity).first())
         }
@@ -2637,6 +2637,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             runtimeJankStats = runCatching {
                 JankStats.createAndTrack(window) { frameData ->
+                    PerformanceCapture.onFrame(window.decorView, frameData)
                     AppRuntimeVisualGuardTracker.onFrame(
                         session = runtimeVisualGuardSession,
                         frameData = frameData,

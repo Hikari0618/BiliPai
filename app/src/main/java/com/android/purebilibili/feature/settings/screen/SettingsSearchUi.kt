@@ -109,6 +109,8 @@ internal fun SettingsHomeSearchEntry(
         elasticFeedbackStrength = com.android.purebilibili.core.ui.components.APP_SEARCH_ELASTIC_FEEDBACK_STRENGTH,
         useNeutralLiquidContainer = true,
         captureShellForContent = false,
+        // 矮胶囊按实际高度相对 64dp 基准缩放 lens，避免上下折射在中线相撞成黑线。
+        shellLensIntensity = com.android.purebilibili.feature.home.components.resolveFloatingDockGeometryScale(AppChromeSizeTokens.LiquidSearchFieldHeightDp.toFloat()),
     ) {
         // Glass entry is a compact click target, independent of native input-field metrics.
         Row(

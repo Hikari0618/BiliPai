@@ -1,6 +1,8 @@
 // 文件路径: feature/video/VideoActivity.kt
 package com.android.purebilibili.feature.video
 
+import com.android.purebilibili.core.performance.PerformanceCapture
+import com.android.purebilibili.core.performance.bindPerformanceCapture
 import android.Manifest
 import android.app.PictureInPictureParams
 import android.content.Context
@@ -183,6 +185,7 @@ open class VideoActivity : ComponentActivity() {
             finish()
             return
         }
+        bindPerformanceCapture(kind = "detail", initialRoute = request.toInitialRoute())
         officialReturnBvid = if (request.initialRoute.isBlank()) request.bvid else {
             com.android.purebilibili.navigation3.resolveSystemWindowCardIdentity(
                 com.android.purebilibili.navigation3.legacyRouteToBiliPaiNavKey(request.initialRoute),
@@ -452,6 +455,7 @@ open class VideoActivity : ComponentActivity() {
         } else {
             runtimeJankStats = runCatching {
                 JankStats.createAndTrack(window) { frameData ->
+                    PerformanceCapture.onFrame(window.decorView, frameData)
                     AppRuntimeVisualGuardTracker.onFrame(
                         session = runtimeVisualGuardSession,
                         frameData = frameData,

@@ -62,6 +62,10 @@ internal enum class SettingsIconRole {
     RELEASE_CHANNEL,
     CRASH_TRACKING,
     ANALYTICS,
+    PERFORMANCE_CAPTURE,
+    PERFORMANCE_MARK,
+    PERFORMANCE_REPORT,
+    PERFORMANCE_PREVIEW,
     FEED_API,
     REFRESH_COUNT,
     DYNAMIC_PREVIEW_TEXT,
@@ -339,6 +343,10 @@ internal fun resolveSettingsMaterialSymbolResource(role: SettingsIconRole): Int 
     SettingsIconRole.INTERACTION_COMMENT -> R.drawable.ms_chat_bubble_outline_24
     SettingsIconRole.DATA_BACKUP -> R.drawable.ms_backup_24
     SettingsIconRole.PRIVACY_PERMISSION -> R.drawable.ms_lock_24
+    SettingsIconRole.PERFORMANCE_MARK -> R.drawable.ic_settings_performance_mark_24
+    SettingsIconRole.PERFORMANCE_CAPTURE -> R.drawable.ms_speed_24
+    SettingsIconRole.PERFORMANCE_PREVIEW -> R.drawable.ms_find_in_page_24
+    SettingsIconRole.PERFORMANCE_REPORT -> R.drawable.ms_share_24
     SettingsIconRole.DIAGNOSTICS -> R.drawable.ms_terminal_24
     SettingsIconRole.ABOUT_SUPPORT -> R.drawable.ms_info_24
     SettingsIconRole.APPEARANCE -> R.drawable.ms_palette_24

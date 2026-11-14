@@ -3,6 +3,10 @@ package com.android.purebilibili.feature.settings
 import com.android.purebilibili.navigation3.BiliPaiNavKey
 
 internal fun resolveSettingsSearchNavigation(result: SettingsSearchResult): BiliPaiNavKey? {
+    // 场景内具体条目已指定分类时，不再被通用入口映射到其他子页。
+    if (isSceneSettingsSearchTarget(result.target)) {
+        result.page?.let { return resolveSettingsCategoryNavKey(it) }
+    }
     resolveSettingsSceneDetailFocus(result.target)?.let { detailFocus ->
         return when (detailFocus.target) {
             SettingsSearchTarget.APPEARANCE -> BiliPaiNavKey.AppearanceSettings

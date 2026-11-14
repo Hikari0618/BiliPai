@@ -63,6 +63,8 @@ internal val settingsStaticDescriptionIndex: Map<String, String> = mapOf(
     "appearance.video_card_long_press_action_enabled" to "长按卡片显示快捷操作与预览；已关闭长按手势，避免误触（默认关闭）",
     "diagnostics.analytics_enabled" to "匿名统计每日活跃和基础功能使用情况，不包含账号内容；默认开启",
     "diagnostics.crash_tracking_enabled" to "记录崩溃和严重故障信息，帮助定位问题；默认开启",
+    com.android.purebilibili.core.performance.PERFORMANCE_PREVIEW_SETTING_ID to "查看最近报告的采集环境、卡顿页面和问题时段，可复制摘要",
+    com.android.purebilibili.core.performance.PERFORMANCE_CAPTURE_SETTING_ID to "开启采集页面滑动与切换性能，关闭时保存报告；包含卡顿页面排序、问题时段与人工标记回看摘要",
     "diagnostics.enhanced_diagnostic_logging_enabled" to "记录详细运行信息；关闭后清除，基础错误日志保留；记录更多排查信息，隐藏账号凭据与观看内容",
     "help.easter_egg_enabled" to "刷新、点赞、投币、搜索时显示趣味提示",
     "home.dynamic_comment_preview_visible" to "在动态卡片中显示相关评论摘要",
